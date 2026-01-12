@@ -1,0 +1,32 @@
+[
+  {
+    "rut": "16664641-3",
+    "name": "Hugo Crocco",
+    "section": "Sindicato Humboldt",
+    "active": true
+  },
+  {
+    "rut": "25575007-5",
+    "name": "Pablo Cavieres",
+    "section": "Aiep",
+    "active": true
+  },
+  {
+    "rut": "13076346-4",
+    "name": "Carlos Hernandez",
+    "section": "Sindicato Norte",
+    "active": true
+  },
+  {
+    "rut": "15432109-5",
+    "name": "Ruth Crocco",
+    "section": "Sindicato Sur",
+    "active": true
+  },
+  {
+    "rut": "12345678-9",
+    "name": "Kristian Gonzalez",
+    "section": "Frost Motors",
+    "active": true
+  }
+]

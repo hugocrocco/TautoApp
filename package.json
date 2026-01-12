@@ -1,0 +1,10 @@
+{
+  "name": "sindicato-humboldt",
+  "private": true,
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n BACK,FRONT -c auto \"cd backend && ./mvnw spring-boot:run\" \"cd frontend && npm run dev -- --host --port 5173\""
+  }
+}
