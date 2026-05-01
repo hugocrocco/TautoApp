@@ -26,9 +26,10 @@ function resolvePhotoSrc(member) {
   return "";
 }
 
-export default function CardPreview({ member, qrValue }) {
+export default function CardPreview({ member, qrValue, status }) {
   const photoSrc = resolvePhotoSrc(member);
   const [imgFailed, setImgFailed] = useState(false);
+  const isValid = status === "VALID" || (member?.statusLabel || "").toUpperCase().includes("VIGENTE");
 
   useEffect(() => {
     setImgFailed(false);
@@ -39,10 +40,10 @@ export default function CardPreview({ member, qrValue }) {
       <div style={styles.header}>
         <div style={styles.brandRow}>
           <div style={styles.logoWrap}>
-            <img src="/VMC.PNG" alt="VMC" style={styles.logo} />
+            <img src="/logo-sindicato.png" alt="Logo Sindicato Humboldt" style={styles.logo} />
           </div>
           <div>
-            <div style={styles.org}>Valparaíso Moto Club</div>
+            <div style={styles.org}>Sindicato Humboldt</div>
             <div style={styles.orgSub}>VMC</div>
           </div>
         </div>
@@ -72,10 +73,10 @@ export default function CardPreview({ member, qrValue }) {
 
           <div style={styles.fieldBlock}>
             <span style={styles.label}>Sección</span>
-            <span style={styles.value}>{member?.section || "Valparaíso Moto Club"}</span>
+            <span style={styles.value}>{member?.section || "Sindicato Humboldt"}</span>
           </div>
 
-          <div style={styles.statusChip}>
+          <div style={{ ...styles.statusChip, ...(isValid ? styles.statusValid : styles.statusInvalid) }}>
             {member?.statusLabel || "MIEMBRO VIGENTE"}
           </div>
 
@@ -95,7 +96,7 @@ const styles = {
     width: "100%",
     borderRadius: 24,
     padding: 18,
-    background: "linear-gradient(180deg, #556B2F 0%, #3E4F22 100%)",
+    background: "linear-gradient(180deg, #12385A 0%, #1E4E75 100%)",
     color: "white",
     fontFamily: "system-ui",
     boxShadow: "0 18px 38px rgba(0,0,0,0.45)",
@@ -104,7 +105,7 @@ const styles = {
   card: {
     borderRadius: 24,
     padding: 16,
-    background: "#556B2F",
+    background: "#12385A",
     color: "white",
     boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
   },
@@ -158,6 +159,16 @@ const styles = {
     fontWeight: 800,
     background: "rgba(0,0,0,0.35)",
     border: "1px solid rgba(255,255,255,0.4)",
+  },
+  statusValid: {
+    background: "rgba(92,198,200,0.22)",
+    border: "1px solid rgba(92,198,200,0.75)",
+    color: "#D9FFFF",
+  },
+  statusInvalid: {
+    background: "rgba(255,107,107,0.20)",
+    border: "1px solid rgba(255,107,107,0.75)",
+    color: "#FFECEC",
   },
   code: { marginTop: 2, fontSize: 11, opacity: 0.9 },
 

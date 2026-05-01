@@ -9,7 +9,6 @@ export default function Card() {
   const navigate = useNavigate();
   const [flipped, setFlipped] = useState(false);
 
-  // Keep both faces EXACT same height as the front face
   const frontRef = useRef(null);
   const [cardHeight, setCardHeight] = useState(null);
 
@@ -19,7 +18,7 @@ export default function Card() {
 
     const measure = () => {
       const h = Math.ceil(el.getBoundingClientRect().height);
-      if (h && h > 0) setCardHeight(h);
+      if (h > 0) setCardHeight(h);
     };
 
     measure();
@@ -34,19 +33,20 @@ export default function Card() {
   }, []);
 
   const stored = localStorage.getItem("member");
+
   const memberFallback = {
     displayName: "Hugo Crocco",
     rutMasked: "16664*****",
-    section: "Valparaíso Moto Club",
-    credentialCode: "VMC-0001",
+    section: "Sindicato Humboldt",
+    credentialCode: "HUMB-0001",
     photoUrl: "",
   };
 
   let member = memberFallback;
+
   if (stored) {
     try {
-      const parsed = JSON.parse(stored);
-      member = { ...memberFallback, ...parsed };
+      member = { ...memberFallback, ...JSON.parse(stored) };
     } catch {
       member = memberFallback;
     }
@@ -54,7 +54,6 @@ export default function Card() {
 
   const status = member.credentialCode ? "VALID" : "NOT_FOUND";
   const statusLabel = status === "VALID" ? "MIEMBRO VIGENTE" : "NO REGISTRADO";
-
   const verifyUrl = `${baseUrl}/#/verify/${member.credentialCode || "NO-CARD"}`;
 
   const benefits = useMemo(() => {
@@ -62,92 +61,58 @@ export default function Card() {
     return raw.filter((b) => b?.active !== false);
   }, []);
 
-  const handleLogout = () => {
-    try {
-      localStorage.removeItem("member");
-      localStorage.removeItem("session");
-      localStorage.removeItem("role");
-      localStorage.removeItem("isAdmin");
-    } catch (e) {
-      // ignore
-    }
+  function handleLogout() {
+    localStorage.removeItem("member");
+    localStorage.removeItem("session");
+    localStorage.removeItem("role");
+    localStorage.removeItem("isAdmin");
     navigate("/", { replace: true });
-  };
-
-  const flipInnerStyle = {
-    ...styles.flipInner,
-    transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-  };
+  }
 
   return (
     <div style={styles.page}>
       <div style={styles.container}>
         <PageFlipShell>
-          <div
-            style={{
-              ...styles.flipCard,
-              height: cardHeight ? cardHeight : undefined,
-            }}
-          >
-            <div style={flipInnerStyle}>
-              {/* FRONT */}
-              <div style={{ ...styles.flipFace, ...styles.flipFront }}>
+          <div style={{ ...styles.flipCard, height: cardHeight || "auto" }}>
+            <div
+              style={{
+                ...styles.flipInner,
+                transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+              }}
+            >
+              <div style={{ ...styles.face, ...styles.front }}>
                 <div ref={frontRef}>
                   <CardPreview
-                    member={{
-                      ...member,
-                      statusLabel,
-                      photoUrl: member.photoUrl || "",
-                    }}
+                    member={{ ...member, statusLabel }}
                     qrValue={verifyUrl}
                     status={status}
                   />
 
                   <div style={styles.footer}>
-                    <button
-                      type="button"
-                      onClick={() => setFlipped(true)}
-                      style={styles.linkButton}
-                    >
-                      Ver Beneficios
+                    <button style={styles.linkButton} onClick={() => setFlipped(true)}>
+                      Ver beneficios
                     </button>
                     <span style={styles.dot}>•</span>
-                    <Link to="/" style={styles.link}>
-                      Ir al inicio
-                    </Link>
+                    <Link to="/" style={styles.link}>Inicio</Link>
                     <span style={styles.dot}>•</span>
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      style={styles.linkButton}
-                    >
+                    <button style={styles.linkButton} onClick={handleLogout}>
                       Cerrar sesión
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* BACK */}
-              <div style={{ ...styles.flipFace, ...styles.flipBack }}>
+              <div style={{ ...styles.face, ...styles.back }}>
                 <div style={styles.backCard}>
                   <div style={styles.backHeader}>
-                    <div style={styles.brandRow}>
-                      <div style={styles.logoWrap}>
-                        <img
-                          src="/VMC.PNG"
-                          alt="Logo VMC"
-                          style={styles.logo}
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <div style={styles.backTitle}>Beneficios VMC</div>
-                        <div style={styles.backSub}>
-                          {member.displayName || "Invitado"}
-                        </div>
-                      </div>
+                    <img
+                      src="/logo-sindicato.png"
+                      alt="Logo Sindicato Humboldt"
+                      style={styles.logo}
+                    />
+                    <div>
+                      <div style={styles.backTitle}>Beneficios Humboldt</div>
+                      <div style={styles.backSub}>{member.displayName}</div>
                     </div>
                   </div>
 
@@ -157,11 +122,10 @@ export default function Card() {
                     ) : (
                       benefits.map((b) => (
                         <div key={b.id ?? b.title} style={styles.benefitItem}>
-                          <div style={styles.benefitTitle}>• {b.title}</div>
-                          <div style={styles.benefitDesc}>{b.detail}</div>
+                          <div style={styles.benefitTitle}>{b.title}</div>
+                          <div style={styles.benefitDesc}>{b.detail || b.description}</div>
                           <div style={styles.benefitMeta}>
-                            {b.institution ? `• ${b.institution}` : ""}
-                            {b.category ? `  •  ${b.category}` : ""}
+                            {b.institution || ""} {b.category ? `• ${b.category}` : ""}
                           </div>
                         </div>
                       ))
@@ -169,11 +133,7 @@ export default function Card() {
                   </div>
 
                   <div style={styles.backFooter}>
-                    <button
-                      type="button"
-                      onClick={() => setFlipped(false)}
-                      style={styles.linkButton}
-                    >
+                    <button style={styles.linkButton} onClick={() => setFlipped(false)}>
                       Volver
                     </button>
                   </div>
@@ -190,12 +150,14 @@ export default function Card() {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "#1F2A14", // olive dark
+    background: "#0B1F3A",
     padding: 20,
     fontFamily: "system-ui",
   },
-  container: { maxWidth: 420, margin: "0 auto" },
-
+  container: {
+    maxWidth: 420,
+    margin: "0 auto",
+  },
   flipCard: {
     position: "relative",
     width: "100%",
@@ -208,7 +170,7 @@ const styles = {
     transformStyle: "preserve-3d",
     transition: "transform 0.6s ease",
   },
-  flipFace: {
+  face: {
     position: "absolute",
     inset: 0,
     width: "100%",
@@ -216,115 +178,95 @@ const styles = {
     backfaceVisibility: "hidden",
     WebkitBackfaceVisibility: "hidden",
   },
-  flipFront: { transform: "rotateY(0deg)" },
-  flipBack: { transform: "rotateY(180deg)" },
-
-  footer: { textAlign: "center", marginTop: 12 },
+  front: {
+    transform: "rotateY(0deg)",
+  },
+  back: {
+    transform: "rotateY(180deg)",
+  },
+  footer: {
+    textAlign: "center",
+    marginTop: 12,
+  },
   link: {
-    color: "#A3D07C", // olive accent
+    color: "#5CC6C8",
     fontWeight: 900,
     textDecoration: "none",
   },
-  dot: { color: "rgba(255,255,255,0.40)", margin: "0 10px" },
   linkButton: {
     background: "transparent",
     border: "none",
-    padding: 0,
-    margin: 0,
-    cursor: "pointer",
-    color: "#A3D07C", // olive accent
+    color: "#5CC6C8",
     fontWeight: 900,
-    textDecoration: "none",
-    fontFamily: "inherit",
-    fontSize: "inherit",
+    cursor: "pointer",
+    fontSize: 14,
   },
-
+  dot: {
+    color: "rgba(255,255,255,0.45)",
+    margin: "0 8px",
+  },
   backCard: {
+    height: "100%",
     borderRadius: 24,
-    background: "#556B2F", // olive main
+    padding: 18,
+    background: "#12385A",
     color: "white",
     boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
-    height: "100%",
+    boxSizing: "border-box",
     display: "flex",
     flexDirection: "column",
-    padding: 18,
   },
   backHeader: {
-    marginBottom: 12,
-  },
-  brandRow: {
     display: "flex",
     alignItems: "center",
     gap: 12,
-  },
-  logoWrap: {
-    width: 128,
-    height: 128,
-    borderRadius: 14,
-    background: "rgba(255,255,255,0.14)",
-    border: "1px solid rgba(255,255,255,0.18)",
-    display: "grid",
-    placeItems: "center",
-    overflow: "hidden",
-    flex: "0 0 auto",
+    marginBottom: 14,
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 90,
+    height: 90,
     objectFit: "contain",
   },
-  backTitle: { fontSize: 26, fontWeight: 900, lineHeight: 1.05 },
-  backSub: { fontSize: 13, opacity: 0.85, fontWeight: 700, marginTop: 4 },
-
+  backTitle: {
+    fontSize: 22,
+    fontWeight: 900,
+  },
+  backSub: {
+    fontSize: 13,
+    opacity: 0.85,
+  },
   benefitList: {
     flex: 1,
     overflowY: "auto",
-    paddingRight: 2,
     display: "grid",
-    gap: 12,
+    gap: 10,
   },
   benefitItem: {
-    width: "100%",
-    borderRadius: 18,
-    padding: 16,
-    background: "rgba(59, 80, 38, 0.35)", // olive tinted dark
-    border: "1px solid rgba(145, 124, 124, 0.18)",
-    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
+    borderRadius: 16,
+    padding: 12,
+    background: "rgba(92,198,200,0.14)",
+    border: "1px solid rgba(92,198,200,0.28)",
   },
   benefitTitle: {
     fontWeight: 900,
-    fontSize: 22,
-    marginBottom: 6,
-    color: "#FFFFFF",
+    fontSize: 16,
   },
   benefitDesc: {
-    fontSize: 16,
+    marginTop: 4,
+    fontSize: 13,
     opacity: 0.95,
-    lineHeight: 1.25,
-    color: "#FFFFFF",
   },
   benefitMeta: {
-    fontSize: 14,
-    opacity: 0.85,
-    marginTop: 10,
-    color: "#F1F5F0",
+    marginTop: 6,
+    fontSize: 12,
+    opacity: 0.8,
   },
-  empty: { opacity: 0.9, fontSize: 14 },
-
+  empty: {
+    opacity: 0.9,
+    fontSize: 14,
+  },
   backFooter: {
     textAlign: "center",
     marginTop: 12,
-    paddingTop: 6,
-  },
-
-  idCardWrap: {
-    background: "transparent",
-  },
-
-  idBrandHeader: {
-    borderRadius: 18,
-    background: "rgba(138, 42, 42, 0.18)",
-    backdropFilter: "blur(6px)",
-    border: "1px solid rgba(255,255,255,0.18)",
   },
 };

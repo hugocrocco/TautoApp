@@ -21,11 +21,6 @@ public class UserPhotoController {
         this.storage = storage;
     }
 
-    /**
-     * SUBIR FOTO (privada en OCI)
-     * POST /api/photos/{institucionId}/{rut}
-     * form-data: file=<archivo>
-     */
     @PostMapping(value = "/{institucionId}/{rut}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> upload(
             @PathVariable Long institucionId,
@@ -43,14 +38,9 @@ public class UserPhotoController {
             storage.uploadPhoto(objectName, in, file.getSize(), file.getContentType());
         }
 
-        // Por ahora devolvemos la "key" del objeto (después lo guardas en DB si quieres)
-        return ResponseEntity.ok().body(objectName);
+        return ResponseEntity.ok(objectName);
     }
 
-    /**
-     * VER FOTO (la expone SOLO vía backend; sigue privada en OCI)
-     * GET /api/photos/{institucionId}/{rut}
-     */
     @GetMapping("/{institucionId}/{rut}")
     public ResponseEntity<InputStreamResource> view(
             @PathVariable Long institucionId,

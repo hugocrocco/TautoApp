@@ -1,0 +1,31 @@
+
+
+
+Listado de Paginas de App Humboldt
+
+
+
+http://localhost:5173/#/
+http://localhost:5173/#/login
+http://localhost:5173/#/register
+http://localhost:5173/#/admin
+http://localhost:5173/#/admin/members
+http://localhost:5173/#/benefits
+
+
+<div style={styles.title}>Sindicato Humboldt</div>
+          <div style={styles.subtitle}>Sistema de Identificacion de Afiliados </div>
+
+
+Pendientes de la App
+
+-Verificación en dos pasos para ingresar. ( mensaje por correo electrónico con codigo)
+
+- opcion de cambiar la clave. 
+
+Pagina de verificación de codigo qr que se refresque minuto a minuto
+
+Listado de miembros del sindicato optimizado, 
+
+
+

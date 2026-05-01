@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PageFlipShell from "../components/PageFlipShell";
+import { login } from "../services/authService"; // ⬅️ NUEVO: servicio hacia el backend
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function Login() {
   });
 
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false); // ⬅️ NUEVO
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -18,7 +20,7 @@ export default function Login() {
     setError("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     const rut = form.rut.trim();
@@ -29,33 +31,47 @@ export default function Login() {
       return;
     }
 
-    // MVP: por ahora solo guardamos “sesión” local (sin backend)
-    // Más adelante aquí llamamos al backend /api/auth/login
-    try {
-      localStorage.setItem(
-        "session",
-        JSON.stringify({
-          ok: true,
-          rut,
-          ts: Date.now(),
-        })
-      );
-    } catch (err) {
-      console.error(err);
-    }
+    setLoading(true);
+    setError("");
 
-    // Si hay credencial ya creada, la mostramos; si no, lo mandas a register (después)
-    navigate("/card");
+    try {
+      // 👇 Llamada real al backend
+      const userData = await login({ rut, password });
+
+      // Guarda sesión local (puedes adaptar qué guardas según la respuesta del backend)
+      try {
+        localStorage.setItem(
+          "session",
+          JSON.stringify({
+            ok: true,
+            rut,
+            ts: Date.now(),
+            backendUser: userData || null,
+          })
+        );
+      } catch (storageErr) {
+        console.error("Error guardando sesión:", storageErr);
+      }
+
+      // Redirige a la credencial
+      navigate("/card");
+    } catch (err) {
+      console.error("Error de login:", err);
+      // El authService debería lanzar Error con .message amigable
+      setError(err.message || "No se pudo iniciar sesión. Intenta nuevamente.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const styles = {
-    page: { minHeight: "100vh", background: "#1F2A14", padding: 20, fontFamily: "system-ui" },
+    page: { minHeight: "100vh", background: "#0B1F3A", padding: 20, fontFamily: "system-ui" },
     container: { maxWidth: 420, margin: "0 auto" },
 
     card: {
       borderRadius: 24,
       padding: 18,
-      background: "linear-gradient(180deg, #556B2F 0%, #3E4F22 100%)",
+      background: "linear-gradient(180deg, #12385A 0%, #1E4E75 100%)",
       color: "white",
       boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
     },
@@ -117,13 +133,15 @@ export default function Login() {
       border: "none",
       fontWeight: 900,
       cursor: "pointer",
-      background: "#A3D07C",
-      color: "#1F2A14",
+      background: loading ? "#c5e7a5" : "#5CC6C8",
+      color: "#0B1F3A",
       fontSize: 14,
+      opacity: loading ? 0.8 : 1,
     },
 
     footer: { marginTop: 10, textAlign: "center", fontSize: 12 },
     link: { color: "#E5F5C6", fontWeight: 900, textDecoration: "none" },
+    helper: { fontSize: 11, opacity: 0.8, marginTop: 4, textAlign: "center" },
   };
 
   return (
@@ -134,11 +152,11 @@ export default function Login() {
             <div style={styles.header}>
               <div style={styles.brandRow}>
                 <div style={styles.logoWrap}>
-                  <img src="/VMC.PNG" alt="VMC" style={styles.logo} />
+                  <img src="/logo-sindicato.png" alt="VMC" style={styles.logo} />
                 </div>
                 <div>
-                  <div style={styles.org}>Valparaíso Moto Club</div>
-                  <div style={styles.sub}>VMC · Iniciar sesión</div>
+                  <div style={styles.org}>Sindicato Humboldt</div>
+                  <div style={styles.sub}>Iniciar sesión</div>
                 </div>
               </div>
             </div>
@@ -153,6 +171,7 @@ export default function Login() {
                   style={styles.input}
                   placeholder="Ej: 12.345.678-9"
                   autoComplete="username"
+                  disabled={loading}
                 />
               </label>
 
@@ -166,14 +185,21 @@ export default function Login() {
                   placeholder="••••"
                   type="password"
                   autoComplete="current-password"
+                  disabled={loading}
                 />
               </label>
 
               {error ? <div style={styles.error}>{error}</div> : null}
 
-              <button type="submit" style={styles.button}>
-                Iniciar sesión
+              <button type="submit" style={styles.button} disabled={loading}>
+                {loading ? "Ingresando..." : "Iniciar sesión"}
               </button>
+
+              <div style={styles.helper}>
+                {loading
+                  ? "Validando tus credenciales en el servidor..."
+                  : "Ingresa tus datos para ver tu credencial."}
+              </div>
             </form>
 
             <div style={styles.footer}>

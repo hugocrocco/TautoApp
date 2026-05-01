@@ -3,7 +3,7 @@ package cl.humboldt.credencial;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "cl.humboldt.credencial")
 public class CredencialApiApplication {
 
 	public static void main(String[] args) {

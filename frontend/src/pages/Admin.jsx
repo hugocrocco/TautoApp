@@ -1,77 +1,243 @@
-import { useState, useEffect } from "react";
-import { mockDb } from "../services/mockDb";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-export default function Admin() {
-  const [, forceUpdate] = useState(0);
+const API_BASE = "http://localhost:8080";
 
-  function toggleStatus(code) {
-    mockDb[code].status = mockDb[code].status === "VALID" ? "REVOKED" : "VALID";
-    forceUpdate((n) => n + 1);
+function normalizeRut(rut) {
+  return (rut || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[^0-9K-]/g, "");
+}
+
+function prettyJson(obj) {
+  try {
+    return JSON.stringify(obj, null, 2);
+  } catch {
+    return String(obj);
+  }
+}
+
+async function apiFetch(path, { method = "GET", adminKey, body } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (adminKey) headers["X-ADMIN-KEY"] = adminKey;
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
   }
 
-  // (Opcional) para que no quede “pegado” si cambias de usuario/lista
-  useEffect(() => {
-    forceUpdate((n) => n + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  if (!res.ok) {
+    const msg = (data && data.message) || res.statusText || "Error";
+    const err = new Error(msg);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-        <div style={styles.card}>
-          {/* HEADER (igual que CardPreview) */}
-          <div style={styles.header}>
-            <div style={styles.brandRow}>
-              <div style={styles.logoWrap}>
-                <img src="/VMC.PNG" alt="VMC" style={styles.logo} />
-              </div>
-              <div>
-                <div style={styles.org}>Valparaíso Moto Club</div>
-                <div style={styles.orgSub}>VMC</div>
+  return data;
+}
+
+export default function Admin() {
+  const [adminKey, setAdminKey] = useState(() => localStorage.getItem("adminKey") || "");
+  const [draftKey, setDraftKey] = useState(adminKey);
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [lastResponse, setLastResponse] = useState(null);
+  const [notice, setNotice] = useState("Ingresa la clave admin para administrar el padrón.");
+  const [mode, setMode] = useState("create"); // create | edit
+
+  const [rut, setRut] = useState("");
+  const [nombreCompleto, setNombreCompleto] = useState("");
+  const [email, setEmail] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [estadoSindicato, setEstadoSindicato] = useState("ACTIVO");
+  const [alDiaCuotas, setAlDiaCuotas] = useState(true);
+  const [ultimaCuotaPagada, setUltimaCuotaPagada] = useState("");
+
+  const rutNorm = useMemo(() => normalizeRut(rut), [rut]);
+
+  async function verifyAdminKey() {
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      await apiFetch("/api/admin/health", { adminKey: draftKey.trim() });
+      localStorage.setItem("adminKey", draftKey.trim());
+      setAdminKey(draftKey.trim());
+      setNotice("Acceso admin concedido. Ahora puedes buscar, crear o actualizar socios.");
+    } catch (e) {
+      setAuthError(`No autorizado o backend caído. (${e.status || ""}) ${e.message}`);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem("adminKey");
+    setAdminKey("");
+    setDraftKey("");
+    setAuthError("");
+    setNotice("Ingresa la clave admin para administrar el padrón.");
+  }
+
+  useEffect(() => {
+    if (!adminKey) return;
+
+    apiFetch("/api/admin/health", { adminKey }).catch(() => {
+      localStorage.removeItem("adminKey");
+      setAdminKey("");
+      setDraftKey("");
+      setAuthError("La clave admin ya no es válida.");
+    });
+  }, [adminKey]);
+
+  async function buscar() {
+    setError("");
+    setNotice("");
+    setLastResponse(null);
+
+    if (!rutNorm) {
+      setError("Ingresa un RUT para buscar.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const data = await apiFetch(`/api/admin/members/${encodeURIComponent(rutNorm)}`, {
+        adminKey,
+      });
+
+      setLastResponse(data);
+      setRut(data.rut || rutNorm);
+      setNombreCompleto(data.nombreCompleto || "");
+      setEmail(data.email || "");
+      setTelefono(data.telefono || "");
+      setEstadoSindicato(data.estadoSindicato || "ACTIVO");
+      setAlDiaCuotas(Boolean(data.alDiaCuotas));
+      setUltimaCuotaPagada(data.ultimaCuotaPagada || "");
+      setMode("edit");
+      setNotice("Socio encontrado. Puedes actualizar sus datos y guardar.");
+    } catch (e) {
+      setError(e.message || "No se pudo buscar el socio.");
+      setLastResponse(e.data || null);
+      setMode("create");
+      setNotice("No se encontró el socio. Puedes crearlo completando el formulario y presionando Guardar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function guardar() {
+    setError("");
+    setNotice("");
+    setLastResponse(null);
+
+    if (!rutNorm) {
+      setError("RUT es obligatorio.");
+      return;
+    }
+
+    if (!nombreCompleto.trim()) {
+      setError("Nombre completo es obligatorio.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const payload = {
+        rut: rutNorm,
+        nombreCompleto: nombreCompleto.trim().replace(/\s+/g, " "),
+        email: email.trim() || null,
+        telefono: telefono.trim() || null,
+        estadoSindicato: (estadoSindicato || "ACTIVO").trim().toUpperCase(),
+        alDiaCuotas: Boolean(alDiaCuotas),
+        ultimaCuotaPagada: ultimaCuotaPagada || null,
+      };
+
+      const data = await apiFetch("/api/admin/members", {
+        method: "POST",
+        adminKey,
+        body: payload,
+      });
+
+      setLastResponse(data);
+      setMode("edit");
+      setNotice("Socio guardado correctamente en el padrón.");
+    } catch (e) {
+      setError(e.message || "No se pudo guardar el socio.");
+      setLastResponse(e.data || null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function limpiar() {
+    setRut("");
+    setNombreCompleto("");
+    setEmail("");
+    setTelefono("");
+    setEstadoSindicato("ACTIVO");
+    setAlDiaCuotas(true);
+    setUltimaCuotaPagada("");
+    setError("");
+    setLastResponse(null);
+    setMode("create");
+    setNotice("Formulario listo para crear un nuevo socio.");
+  }
+
+  if (!adminKey) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.container}>
+          <div style={styles.card}>
+            <div style={styles.header}>
+              <div style={styles.brandRow}>
+                <div style={styles.logoWrap}>
+                  <img src="/logo-sindicato.png" alt="VMC" style={styles.logo} />
+                </div>
+                <div>
+                  <div style={styles.org}>Sindicato Humboldt</div>
+                  <div style={styles.orgSub}>Admin · Acceso</div>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* BODY (mismo patrón: bodyRow + dataCol) */}
-          <div style={styles.bodyRow}>
-            <div style={styles.dataCol}>
-              <div style={styles.name}>Panel Administrativo</div>
-              <div style={styles.subTitle}>Activar / Revocar credenciales</div>
+            <div style={styles.form}>
+              <div style={styles.notice}>{notice}</div>
+              <label style={styles.label}>
+                Clave admin
+                <input
+                  value={draftKey}
+                  onChange={(e) => setDraftKey(e.target.value)}
+                  style={styles.input}
+                  placeholder="Ingresa tu clave admin"
+                  type="password"
+                />
+              </label>
 
-              <div style={styles.list}>
-                {Object.entries(mockDb).map(([code, data]) => {
-                  const isValid = data.status === "VALID";
+              {authError ? <div style={styles.error}>{authError}</div> : null}
 
-                  return (
-                    <div key={code} style={styles.item}>
-                      <div style={styles.itemLeft}>
-                        <div style={styles.itemName}>{data.name}</div>
-                        <div style={styles.itemCode}>{code}</div>
-
-                        <span
-                          style={{
-                            ...styles.badge,
-                            background: isValid
-                              ? "rgba(220,252,231,0.95)"
-                              : "rgba(254,226,226,0.95)",
-                            color: isValid ? "#14532D" : "#7F1D1D",
-                          }}
-                        >
-                          {data.status}
-                        </span>
-                      </div>
-
-                      <button
-                        style={styles.button}
-                        onClick={() => toggleStatus(code)}
-                      >
-                        Cambiar
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+              <button
+                style={styles.button}
+                onClick={verifyAdminKey}
+                disabled={authLoading || !draftKey.trim()}
+              >
+                {authLoading ? "Verificando..." : "Entrar"}
+              </button>
 
               <div style={styles.footerRow}>
                 <Link to="/" style={styles.link}>
@@ -80,8 +246,168 @@ export default function Admin() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
 
-          {/* “qrRow” lo dejamos para mantener estructura idéntica */}
+  return (
+    <div style={styles.page}>
+      <div style={styles.container}>
+        <div style={styles.card}>
+          <div style={styles.header}>
+            <div style={styles.brandRow}>
+              <div style={styles.logoWrap}>
+                <img src="/logo-sindicato.png" alt="VMC" style={styles.logo} />
+              </div>
+              <div>
+                <div style={styles.org}>Valparaíso Moto Club</div>
+                <div style={styles.orgSub}>Panel Administrador</div>
+              </div>
+            </div>
+
+            <div style={styles.topActions}>
+  <button style={styles.smallBtn} onClick={limpiar}>
+    Nuevo socio
+  </button>
+
+  <Link to="/admin/members" style={{ textDecoration: "none", flex: 1 }}>
+    <div style={{ ...styles.smallBtn, textAlign: "center" }}>
+      Ver socios
+    </div>
+  </Link>
+
+  <button
+    style={{ ...styles.smallBtn, background: "rgba(255,255,255,0.16)" }}
+    onClick={logout}
+  >
+    Salir
+  </button>
+</div>
+          </div>
+
+          <div style={styles.bodyRow}>
+            <div style={styles.dataCol}>
+              <div style={styles.name}>Miembros (padrón)</div>
+              <div style={styles.subTitle}>
+                {mode === "edit"
+                  ? "Editando socio encontrado"
+                  : "Crear socio o buscar por RUT para editar"}
+              </div>
+
+              <div style={styles.form}>
+                <div style={styles.notice}>
+                  <strong>Qué puedes hacer aquí</strong>
+                  <div style={{ marginTop: 6 }}>
+                    • Buscar un socio por RUT<br />
+                    • Crear un socio nuevo<br />
+                    • Actualizar estado sindical y cuotas<br />
+                    • Corregir email y teléfono
+                  </div>
+                </div>
+
+                {notice ? <div style={styles.notice}>{notice}</div> : null}
+
+                <label style={styles.label}>
+                  RUT
+                  <input
+                    value={rut}
+                    onChange={(e) => setRut(e.target.value)}
+                    style={styles.input}
+                    placeholder="Ej: 12.345.678-9"
+                  />
+                </label>
+
+                <div style={styles.row2}>
+                  <button style={styles.button} onClick={buscar} disabled={busy}>
+                    {busy ? "Buscando..." : "Buscar socio"}
+                  </button>
+                  <button style={{ ...styles.button, background: "#5CC6C8", color: "#0B1F3A" }} onClick={limpiar} disabled={busy}>
+                    Limpiar
+                  </button>
+                </div>
+
+                <label style={styles.label}>
+                  Nombre completo
+                  <input
+                    value={nombreCompleto}
+                    onChange={(e) => setNombreCompleto(e.target.value)}
+                    style={styles.input}
+                    placeholder="Nombre y apellido"
+                  />
+                </label>
+
+                <label style={styles.label}>
+                  Email
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={styles.input}
+                    placeholder="correo@dominio.com"
+                  />
+                </label>
+
+                <label style={styles.label}>
+                  Teléfono
+                  <input
+                    value={telefono}
+                    onChange={(e) => setTelefono(e.target.value)}
+                    style={styles.input}
+                    placeholder="+56 9 ..."
+                  />
+                </label>
+
+                <div style={styles.row2}>
+                  <label style={styles.label}>
+                    Estado sindicato
+                    <select
+                      value={estadoSindicato}
+                      onChange={(e) => setEstadoSindicato(e.target.value)}
+                      style={{ ...styles.input, padding: 10 }}
+                    >
+                      <option value="ACTIVO">ACTIVO</option>
+                      <option value="SUSPENDIDO">SUSPENDIDO</option>
+                      <option value="RETIRADO">RETIRADO</option>
+                    </select>
+                  </label>
+
+                  <label style={styles.label}>
+                    Última cuota
+                    <input
+                      value={ultimaCuotaPagada}
+                      onChange={(e) => setUltimaCuotaPagada(e.target.value)}
+                      style={styles.input}
+                      placeholder="YYYY-MM-DD"
+                    />
+                  </label>
+                </div>
+
+                <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={alDiaCuotas}
+                    onChange={(e) => setAlDiaCuotas(e.target.checked)}
+                  />
+                  Al día en cuotas
+                </label>
+
+                {error ? <div style={styles.error}>{error}</div> : null}
+
+                <button style={styles.button} onClick={guardar} disabled={busy}>
+                  {busy ? "Guardando..." : mode === "edit" ? "Actualizar socio" : "Crear socio"}
+                </button>
+              </div>
+
+              {lastResponse ? <pre style={styles.pre}>{prettyJson(lastResponse)}</pre> : null}
+
+              <div style={styles.footerRow}>
+                <Link to="/" style={styles.link}>
+                  Volver al inicio
+                </Link>
+              </div>
+            </div>
+          </div>
+
           <div style={styles.qrRow} />
         </div>
       </div>
@@ -90,10 +416,9 @@ export default function Admin() {
 }
 
 const styles = {
-  // Misma “página” que el resto
   page: {
     minHeight: "100vh",
-    background: "#1F2A14",
+    background: "#0B1F3A",
     padding: 20,
     fontFamily: "system-ui",
   },
@@ -101,19 +426,15 @@ const styles = {
     maxWidth: 420,
     margin: "0 auto",
   },
-
-  // === MISMA TARJETA QUE CardPreview ===
   card: {
     borderRadius: 24,
     padding: 16,
-    background: "#556B2F",
+    background: "#12385A",
     color: "white",
     boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
     boxSizing: "border-box",
   },
-
-  // Header igual
-  header: { marginBottom: 10 },
+  header: { marginBottom: 10, display: "grid", gap: 10 },
   brandRow: { display: "flex", alignItems: "center", gap: 10 },
   logoWrap: {
     width: 128,
@@ -134,8 +455,17 @@ const styles = {
     opacity: 0.9,
     letterSpacing: 1.2,
   },
-
-  // Body igual (pero acá usamos dataCol como contenedor de todo)
+  topActions: { display: "flex", gap: 8, justifyContent: "space-between" },
+  smallBtn: {
+    flex: 1,
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(0,0,0,0.22)",
+    color: "white",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
   bodyRow: {
     display: "grid",
     gridTemplateColumns: "1fr",
@@ -143,54 +473,71 @@ const styles = {
     alignItems: "start",
   },
   dataCol: { display: "grid", gap: 8 },
-
-  // Títulos similares
   name: { fontSize: 18, fontWeight: 900 },
   subTitle: { fontSize: 12, opacity: 0.9, marginTop: -2 },
-
-  // Lista estilo “dentro de tarjeta”
-  list: {
-    marginTop: 6,
-    display: "flex",
-    flexDirection: "column",
+  form: {
+    display: "grid",
     gap: 10,
-  },
-
-  item: {
-    background: "rgba(255,255,255,0.95)",
-    color: "#0F172A",
-    borderRadius: 14,
-    padding: 12,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  itemLeft: { display: "grid", gap: 2 },
-  itemName: { fontWeight: 900, fontSize: 15, lineHeight: 1.1 },
-  itemCode: { fontSize: 12, opacity: 0.75 },
-
-  badge: {
-    display: "inline-block",
     marginTop: 6,
-    padding: "4px 10px",
-    borderRadius: 999,
-    fontWeight: 900,
-    fontSize: 11,
-    width: "fit-content",
+    padding: 12,
+    borderRadius: 16,
+    background: "rgba(0,0,0,0.18)",
+    border: "1px solid rgba(255,255,255,0.14)",
   },
-
-  button: {
-    padding: "8px 12px",
+  label: { fontSize: 12, opacity: 0.95, display: "grid", gap: 4 },
+  input: {
+    width: "100%",
+    padding: 10,
     borderRadius: 10,
-    border: "none",
-    background: "#3E4F22",
+    border: "1px solid rgba(255,255,255,0.35)",
+    background: "rgba(15,23,42,0.35)",
     color: "white",
+    outline: "none",
+    fontFamily: "inherit",
+    fontSize: 14,
+  },
+  row2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
+  button: {
+    padding: 12,
+    borderRadius: 12,
+    border: "none",
     fontWeight: 900,
     cursor: "pointer",
-    whiteSpace: "nowrap",
+    background: "#1E4E75",
+    color: "white",
+    fontSize: 14,
   },
-
+  error: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: 900,
+    color: "#FFE08A",
+    background: "rgba(0,0,0,0.25)",
+    border: "1px solid rgba(255,255,255,0.18)",
+    padding: "8px 10px",
+    borderRadius: 12,
+  },
+  notice: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#F4F1C9",
+    background: "rgba(0,0,0,0.20)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    padding: "10px 12px",
+    borderRadius: 12,
+    lineHeight: 1.4,
+  },
+  pre: {
+    marginTop: 6,
+    padding: 12,
+    borderRadius: 14,
+    background: "rgba(0,0,0,0.28)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    fontSize: 12,
+    overflowX: "auto",
+    whiteSpace: "pre-wrap",
+  },
   footerRow: {
     marginTop: 10,
     display: "flex",
@@ -202,7 +549,5 @@ const styles = {
     textDecoration: "none",
     opacity: 0.9,
   },
-
-  // Mantener la misma key del componente original
   qrRow: { marginTop: 14, display: "flex", justifyContent: "flex-end" },
 };

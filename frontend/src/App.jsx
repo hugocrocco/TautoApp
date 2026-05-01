@@ -7,6 +7,7 @@ import Benefits from "./pages/Benefits";
 import Admin from "./pages/Admin";
 import Verify from "./pages/Verify";
 import Login from "./pages/Login";
+import AdminMembers from "./pages/AdminMembers";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/benefits" element={<Benefits />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/admin/members" element={<AdminMembers />} />
         <Route path="/verify/:code" element={<Verify />} />
       </Routes>
     </Router>

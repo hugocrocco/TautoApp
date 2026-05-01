@@ -17,11 +17,11 @@ export default function Benefits() {
               <div style={styles.header}>
                 <div style={styles.brandRow}>
                   <div style={styles.logoWrap}>
-                    <img src="/VMC.PNG" alt="VMC" style={styles.logo} />
+                    <img src="/logo-sindicato.png" alt="VMC" style={styles.logo} />
                   </div>
                   <div>
-                    <div style={styles.org}>Valparaíso Moto Club</div>
-                    <div style={styles.orgSub}>VMC</div>
+                    <div style={styles.org}>Sindicato Humboldt</div>
+                    <div style={styles.orgSub}>Beneficios y Convenios</div>
                   </div>
                 </div>
               </div>
@@ -47,7 +47,7 @@ export default function Benefits() {
               <div style={styles.header}>
                 <div style={styles.brandRow}>
                   <div style={styles.logoWrapSmall}>
-                    <img src="/VMC.PNG" alt="VMC" style={styles.logoSmall} />
+                    <img src="/logo-sindicato.png" alt="VMC" style={styles.logoSmall} />
                   </div>
                   <div>
                     <div style={styles.org}>Beneficios</div>
@@ -104,7 +104,7 @@ export default function Benefits() {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "#1F2A14",
+    background: "#0B1F3A",
     padding: 20,
     fontFamily: "system-ui",
   },
@@ -117,7 +117,7 @@ const styles = {
   card: {
     borderRadius: 24,
     padding: 16,
-    background: "#556B2F",
+    background: "#12385A",
     color: "white",
     boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
     boxSizing: "border-box",
@@ -173,7 +173,7 @@ const styles = {
     padding: "12px 16px",
     borderRadius: 14,
     border: "none",
-    background: "#3E4F22",
+    background: "#1E4E75",
     color: "white",
     fontWeight: 900,
     cursor: "pointer",
@@ -215,7 +215,7 @@ const styles = {
     padding: "8px 14px",
     borderRadius: 12,
     border: "none",
-    background: "#3E4F22",
+    background: "#1E4E75",
     color: "white",
     fontWeight: 900,
     cursor: "pointer",

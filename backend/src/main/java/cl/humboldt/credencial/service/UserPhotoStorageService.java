@@ -28,20 +28,13 @@ public class UserPhotoStorageService {
         this.bucket = bucket;
     }
 
-    /**
-     * Genera una ruta privada para la foto.
-     * Recomendación: evita usar RUT en el path (dato sensible / identificable).
-     * Ej: institucion/1/socios/123/profile.jpg
-     */
+    public String getNamespace() { return namespace; }
+    public String getBucket() { return bucket; }
+
     public String buildObjectName(Long institucionId, Long socioId) {
         return "institucion/" + institucionId + "/socios/" + socioId + "/profile.jpg";
     }
 
-    /**
-     * Compatibilidad (no recomendado): si ya tienes código que usa RUT.
-     * Normaliza el RUT removiendo puntos y espacios.
-     * Ej: 16.664.641-3 -> 16664641-3
-     */
     public String buildObjectName(Long institucionId, String rut) {
         String safeRut = rut == null ? "" : rut.trim().toUpperCase();
         safeRut = safeRut.replace(".", "").replace(" ", "");
@@ -55,7 +48,7 @@ public class UserPhotoStorageService {
                 .objectName(objectName)
                 .putObjectBody(data)
                 .contentLength(contentLength)
-                .contentType(contentType != null ? contentType : "image/jpeg")
+                .contentType((contentType != null && !contentType.isBlank()) ? contentType : "image/jpeg")
                 .build();
 
         objectStorage.putObject(req);
