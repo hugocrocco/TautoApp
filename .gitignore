@@ -1,18 +1,35 @@
-# macOS
-.DS_Store
+# Logs
+*.log
+logs/
 
-# VSCode
-.vscode/
+# Maven
+backend/target/
 
 # Node
-node_modules/
-npm-debug.log*
-yarn.lock
-pnpm-lock.yaml
+frontend/node_modules/
+frontend/dist/
 
-# Builds
-dist/
-build/
+# Vite
+vite
+frontend/vite
+backend/vite
 
-# Otros
-sindicato-humboldt.zip
+# Uploads
+backend/uploads/
+
+# IDE
+.vscode/
+.idea/
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# Certificados
+*.pem
+*.key
+
+# Archivos temporales
+FETCH_HEAD
+frontend@0.0.0
+backend/frontend@0.0.0

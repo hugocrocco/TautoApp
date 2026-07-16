@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Link } from "react-router-dom";
 import { registerWithPhoto } from "../services/authService";
 
@@ -21,12 +21,12 @@ export default function Register() {
     const emailConfirmClean = emailConfirm.trim().toLowerCase();
 
     if (!emailClean || !emailConfirmClean) {
-      alert("Debes ingresar y confirmar el correo electrónico.");
+      alert("Debes ingresar y confirmar el correo electrÃ³nico.");
       return;
     }
 
     if (emailClean !== emailConfirmClean) {
-      alert("Los correos electrónicos no coinciden.");
+      alert("Los correos electrÃ³nicos no coinciden.");
       return;
     }
 
@@ -59,7 +59,7 @@ export default function Register() {
       });
 
       console.log("REGISTER OK:", result);
-      window.location.href = "/#/verify-email";
+      window.location.href = `/#/verify-email?rut=${encodeURIComponent(result?.rut || rut)}&email=${encodeURIComponent(result?.email || emailClean)}`;
     } catch (err) {
       console.error("REGISTER ERROR:", err);
       alert(err.message);
@@ -132,7 +132,7 @@ export default function Register() {
             </label>
 
             <label style={styles.label}>
-              Teléfono
+              TelÃ©fono
               <input
                 style={styles.input}
                 placeholder="+56 9 ..."
@@ -142,10 +142,10 @@ export default function Register() {
             </label>
 
             <label style={styles.label}>
-              Dirección
+              DirecciÃ³n
               <input
                 style={styles.input}
-                placeholder="Dirección de casa"
+                placeholder="DirecciÃ³n de casa"
                 value={direccion}
                 onChange={(e) => setDireccion(e.target.value)}
               />

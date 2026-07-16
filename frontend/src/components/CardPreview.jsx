@@ -26,7 +26,7 @@ function resolvePhotoSrc(member) {
   return "";
 }
 
-export default function CardPreview({ member, qrValue, status }) {
+export default function CardPreview({ member, qrValue, status, qrLoading, qrError, qrTimer }) {
   const photoSrc = resolvePhotoSrc(member);
   const [imgFailed, setImgFailed] = useState(false);
   const isValid = status === "VALID" || (member?.statusLabel || "").toUpperCase().includes("VIGENTE");
@@ -85,7 +85,16 @@ export default function CardPreview({ member, qrValue, status }) {
       </div>
 
       <div style={styles.qrRow}>
-        <QrBox value={qrValue} />
+        <div style={styles.qrWrap}>
+          <QrBox value={qrValue} />
+          <div style={styles.qrCaption}>
+            {qrLoading
+              ? "Generando QR seguro…"
+              : qrError
+                ? qrError
+                : `QR vence en ${qrTimer}`}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -173,4 +182,6 @@ const styles = {
   code: { marginTop: 2, fontSize: 11, opacity: 0.9 },
 
   qrRow: { marginTop: 14, display: "flex", justifyContent: "flex-end" },
+  qrWrap: { display: "grid", justifyItems: "center", gap: 6 },
+  qrCaption: { fontSize: 11, fontWeight: 800, color: "#D9FFFF", textAlign: "center", maxWidth: 220 },
 };

@@ -16,6 +16,18 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
 
+  mail:
+    host: smtp.email.us-sanjose-1.oci.oraclecloud.com
+    port: 587
+    username: ocid1.user.oc1..aaaaaaaa6cwlipxsion2gsbcr3lni2rjphptuq2fpwcihehhibc6ezyynlya@ocid1.tenancy.oc1..aaaaaaaa2b233ssbxlsyqf52ez7zoooymnms7llw67coqvfeir4umo2wyzba.tc.com
+    password: E{9N)o8u4+d9$xH]mW<W
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 oci:
   objectstorage:
     namespace: axdbbhb5ebzz
@@ -24,3 +36,8 @@ oci:
 
 app:
   admin-key: "hbdt"
+  credential-ttl-seconds: 180
+  credential-secret: "cambia-este-secreto-en-produccion"
+  benefits-upload-dir: "uploads/benefits"
+  mail:
+    from: SindicatoHbdt@Tauto.cl

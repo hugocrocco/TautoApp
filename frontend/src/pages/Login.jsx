@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PageFlipShell from "../components/PageFlipShell";
-import { login } from "../services/authService"; // ⬅️ NUEVO: servicio hacia el backend
+import { login } from "../services/authService";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,11 +12,16 @@ export default function Login() {
   });
 
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false); // ⬅️ NUEVO
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((p) => ({ ...p, [name]: value }));
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+
     setError("");
   };
 
@@ -35,11 +40,26 @@ export default function Login() {
     setError("");
 
     try {
-      // 👇 Llamada real al backend
-      const userData = await login({ rut, password });
+      const userData = await login({
+        rut,
+        password,
+        institucionId: 1,
+      });
 
-      // Guarda sesión local (puedes adaptar qué guardas según la respuesta del backend)
       try {
+        localStorage.setItem(
+          "member",
+          JSON.stringify({
+            ...userData,
+            displayName: userData.displayName,
+            rutMasked: userData.rut,
+            photoUrl: `/api/photos/1/${userData.rut}?t=${Date.now()}`,
+            statusLabel: "MIEMBRO VIGENTE",
+            credentialCode:
+              userData.credentialCode || "HUMB-0001",
+          })
+        );
+
         localStorage.setItem(
           "session",
           JSON.stringify({
@@ -49,35 +69,58 @@ export default function Login() {
             backendUser: userData || null,
           })
         );
-      } catch (storageErr) {
-        console.error("Error guardando sesión:", storageErr);
+      } catch (storageError) {
+        console.error(
+          "Error guardando sesión:",
+          storageError
+        );
       }
 
-      // Redirige a la credencial
       navigate("/card");
-    } catch (err) {
-      console.error("Error de login:", err);
-      // El authService debería lanzar Error con .message amigable
-      setError(err.message || "No se pudo iniciar sesión. Intenta nuevamente.");
+    } catch (loginError) {
+      console.error("Error de login:", loginError);
+
+      setError(
+        loginError.message ||
+          "No se pudo iniciar sesión. Intenta nuevamente."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const styles = {
-    page: { minHeight: "100vh", background: "#0B1F3A", padding: 20, fontFamily: "system-ui" },
-    container: { maxWidth: 420, margin: "0 auto" },
+    page: {
+      minHeight: "100vh",
+      background: "#0B1F3A",
+      padding: 20,
+      fontFamily: "system-ui",
+    },
+
+    container: {
+      maxWidth: 420,
+      margin: "0 auto",
+    },
 
     card: {
       borderRadius: 24,
       padding: 18,
-      background: "linear-gradient(180deg, #12385A 0%, #1E4E75 100%)",
+      background:
+        "linear-gradient(180deg, #12385A 0%, #1E4E75 100%)",
       color: "white",
       boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
     },
 
-    header: { marginBottom: 12 },
-    brandRow: { display: "flex", alignItems: "center", gap: 12 },
+    header: {
+      marginBottom: 12,
+    },
+
+    brandRow: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+    },
+
     logoWrap: {
       width: 96,
       height: 96,
@@ -89,9 +132,24 @@ export default function Login() {
       overflow: "hidden",
       flex: "0 0 auto",
     },
-    logo: { width: 90, height: 90, objectFit: "contain" },
-    org: { fontSize: 20, fontWeight: 900, letterSpacing: 0.3 },
-    sub: { marginTop: 2, fontSize: 13, opacity: 0.9 },
+
+    logo: {
+      width: 90,
+      height: 90,
+      objectFit: "contain",
+    },
+
+    org: {
+      fontSize: 20,
+      fontWeight: 900,
+      letterSpacing: 0.3,
+    },
+
+    sub: {
+      marginTop: 2,
+      fontSize: 13,
+      opacity: 0.9,
+    },
 
     form: {
       display: "grid",
@@ -101,9 +159,17 @@ export default function Login() {
       marginLeft: "auto",
       marginRight: "auto",
     },
-    label: { fontSize: 12, opacity: 0.9, display: "grid", gap: 4 },
+
+    label: {
+      fontSize: 12,
+      opacity: 0.9,
+      display: "grid",
+      gap: 4,
+    },
+
     input: {
       width: "100%",
+      boxSizing: "border-box",
       padding: 10,
       borderRadius: 10,
       border: "1px solid rgba(255,255,255,0.35)",
@@ -132,16 +198,43 @@ export default function Login() {
       borderRadius: 12,
       border: "none",
       fontWeight: 900,
-      cursor: "pointer",
+      cursor: loading ? "not-allowed" : "pointer",
       background: loading ? "#c5e7a5" : "#5CC6C8",
       color: "#0B1F3A",
       fontSize: 14,
       opacity: loading ? 0.8 : 1,
     },
 
-    footer: { marginTop: 10, textAlign: "center", fontSize: 12 },
-    link: { color: "#E5F5C6", fontWeight: 900, textDecoration: "none" },
-    helper: { fontSize: 11, opacity: 0.8, marginTop: 4, textAlign: "center" },
+    forgotPasswordWrap: {
+      marginTop: 4,
+      textAlign: "center",
+    },
+
+    forgotPasswordLink: {
+      color: "#FFB347",
+      textDecoration: "none",
+      fontWeight: 800,
+      fontSize: 12,
+    },
+
+    footer: {
+      marginTop: 14,
+      textAlign: "center",
+      fontSize: 12,
+    },
+
+    link: {
+      color: "#E5F5C6",
+      fontWeight: 900,
+      textDecoration: "none",
+    },
+
+    helper: {
+      fontSize: 11,
+      opacity: 0.8,
+      marginTop: 4,
+      textAlign: "center",
+    },
   };
 
   return (
@@ -152,18 +245,32 @@ export default function Login() {
             <div style={styles.header}>
               <div style={styles.brandRow}>
                 <div style={styles.logoWrap}>
-                  <img src="/logo-sindicato.png" alt="VMC" style={styles.logo} />
+                  <img
+                    src="/logo-sindicato.png"
+                    alt="Sindicato Humboldt"
+                    style={styles.logo}
+                  />
                 </div>
+
                 <div>
-                  <div style={styles.org}>Sindicato Humboldt</div>
-                  <div style={styles.sub}>Iniciar sesión</div>
+                  <div style={styles.org}>
+                    Sindicato Humboldt
+                  </div>
+
+                  <div style={styles.sub}>
+                    Iniciar sesión
+                  </div>
                 </div>
               </div>
             </div>
 
-            <form style={styles.form} onSubmit={handleSubmit}>
+            <form
+              style={styles.form}
+              onSubmit={handleSubmit}
+            >
               <label style={styles.label}>
                 RUT (o ID)
+
                 <input
                   name="rut"
                   value={form.rut}
@@ -177,6 +284,7 @@ export default function Login() {
 
               <label style={styles.label}>
                 Contraseña
+
                 <input
                   name="password"
                   value={form.password}
@@ -189,11 +297,30 @@ export default function Login() {
                 />
               </label>
 
-              {error ? <div style={styles.error}>{error}</div> : null}
+              {error ? (
+                <div style={styles.error}>
+                  {error}
+                </div>
+              ) : null}
 
-              <button type="submit" style={styles.button} disabled={loading}>
-                {loading ? "Ingresando..." : "Iniciar sesión"}
+              <button
+                type="submit"
+                style={styles.button}
+                disabled={loading}
+              >
+                {loading
+                  ? "Ingresando..."
+                  : "Iniciar sesión"}
               </button>
+
+              <div style={styles.forgotPasswordWrap}>
+                <Link
+                  to="/forgot-password"
+                  style={styles.forgotPasswordLink}
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
 
               <div style={styles.helper}>
                 {loading

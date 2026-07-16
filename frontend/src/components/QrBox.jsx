@@ -5,7 +5,10 @@ export default function QrBox({ value }) {
   const [src, setSrc] = useState("");
 
   useEffect(() => {
-    if (!value) return;
+    if (!value) {
+      setSrc("");
+      return;
+    }
 
     QRCode.toDataURL(value, { width: 200, margin: 1 })
       .then(setSrc)

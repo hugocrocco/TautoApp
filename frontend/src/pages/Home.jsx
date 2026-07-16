@@ -14,6 +14,7 @@ export default function Home() {
             <Link to="/login" style={styles.button}>Iniciar sesión</Link>
             <Link to="/register" style={styles.button}>Registrarse</Link>
             <Link to="/benefits" style={styles.button}>Beneficios</Link>
+            <Link to="/messages" style={styles.button}>Mensajes</Link>
             <Link to="/admin" style={styles.adminButton}>Panel Admin</Link>
           </div>
         </div>

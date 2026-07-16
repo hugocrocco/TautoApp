@@ -1,18 +1,77 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { mockDb } from "../services/mockDb";
+import { verifyCredentialToken } from "../services/credentialService";
 
 export default function Verify() {
   const { code } = useParams();
+  const token = decodeURIComponent(code || "");
+  const [result, setResult] = useState({ loading: true, status: "CHECKING", message: "Verificando credencial…", remainingSeconds: 0, expiresAt: 0 });
 
-  // Mock demo: válido solo HUMB-001
-  const status = mockDb[code]?.status ?? "NOT_FOUND";
+  useEffect(() => {
+    let alive = true;
+
+    async function runVerification() {
+      try {
+        const data = await verifyCredentialToken(token);
+        if (!alive) return;
+
+        setResult({
+          loading: false,
+          status: data.status || (data.ok ? "VALID" : "INVALID"),
+          message: data.message || "Resultado de verificación.",
+          remainingSeconds: Number(data.remainingSeconds || 0),
+          expiresAt: Number(data.expiresAt || 0),
+          displayName: data.displayName || "",
+          rutMasked: data.rutMasked || data.rut || "",
+          estadoSindicato: data.estadoSindicato || "",
+          alDiaCuotas: data.alDiaCuotas,
+          expiresAtText: data.expiresAtText || "",
+        });
+      } catch (err) {
+        if (!alive) return;
+        setResult({ loading: false, status: "ERROR", message: err.message || "No se pudo verificar la credencial.", remainingSeconds: 0, expiresAt: 0 });
+      }
+    }
+
+    runVerification();
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!result.expiresAt) return;
+
+    const timerId = window.setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((result.expiresAt - Date.now()) / 1000));
+      setResult((prev) => ({
+        ...prev,
+        remainingSeconds: remaining,
+        status: remaining <= 0 && prev.status === "VALID" ? "EXPIRED" : prev.status,
+        message: remaining <= 0 && prev.status === "VALID" ? "El código QR expiró." : prev.message,
+      }));
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [result.expiresAt]);
 
   const ui = useMemo(() => {
-    if (status === "VALID") {
+    if (result.loading || result.status === "CHECKING") {
+      return {
+        title: "VERIFICANDO",
+        subtitle: result.message,
+        icon: "⏳",
+        pillBg: "#DBEAFE",
+        pillBorder: "#2563EB",
+        pillText: "#1E3A8A",
+        cardBg: "#FFFFFF",
+      };
+    }
+
+    if (result.status === "VALID") {
       return {
         title: "MIEMBRO VIGENTE",
-        subtitle: "Credencial verificada correctamente",
+        subtitle: result.message,
         icon: "✅",
         pillBg: "#DCFCE7",
         pillBorder: "#16A34A",
@@ -21,10 +80,10 @@ export default function Verify() {
       };
     }
 
-    if (status === "REVOKED") {
+    if (result.status === "REVOKED") {
       return {
         title: "CREDENCIAL REVOCADA",
-        subtitle: "El miembro ya no se encuentra activo",
+        subtitle: result.message,
         icon: "⛔",
         pillBg: "#FEF3C7",
         pillBorder: "#D97706",
@@ -33,16 +92,28 @@ export default function Verify() {
       };
     }
 
+    if (result.status === "EXPIRED") {
+      return {
+        title: "QR EXPIRADO",
+        subtitle: "Pide al socio que muestre nuevamente su credencial para generar otro QR.",
+        icon: "⌛",
+        pillBg: "#FEE2E2",
+        pillBorder: "#DC2626",
+        pillText: "#7F1D1D",
+        cardBg: "#FFFFFF",
+      };
+    }
+
     return {
-      title: "NO ENCONTRADO",
-      subtitle: "El código no existe en el sistema",
+      title: "NO VÁLIDO",
+      subtitle: result.message || "El código no es válido.",
       icon: "❌",
       pillBg: "#FEE2E2",
       pillBorder: "#DC2626",
       pillText: "#7F1D1D",
       cardBg: "#FFFFFF",
     };
-  }, [status]);
+  }, [result]);
 
   return (
     <div style={styles.page}>
@@ -68,28 +139,51 @@ export default function Verify() {
 
         <div style={styles.subtitle}>{ui.subtitle}</div>
 
+        <div style={styles.timerBox}>
+          <div style={styles.timerLabel}>Tiempo restante del QR</div>
+          <div style={styles.timerValue}>{formatSeconds(result.remainingSeconds)}</div>
+        </div>
+
         <div style={styles.infoBox}>
-          <div style={styles.infoRow}>
-            <div style={styles.infoLabel}>Código</div>
-            <div style={styles.infoValue}>{code}</div>
-          </div>
+          <InfoRow label="Socio" value={result.displayName || "—"} />
           <div style={styles.divider} />
-          <div style={styles.infoRow}>
-            <div style={styles.infoLabel}>Fecha</div>
-            <div style={styles.infoValue}>{new Date().toLocaleString()}</div>
-          </div>
+          <InfoRow label="RUT" value={result.rutMasked || "—"} />
+          <div style={styles.divider} />
+          <InfoRow label="Estado" value={result.estadoSindicato || result.status || "—"} />
+          <div style={styles.divider} />
+          <InfoRow label="Cuotas" value={result.alDiaCuotas === true ? "Al día" : result.alDiaCuotas === false ? "Pendiente / no informado" : "—"} />
+          <div style={styles.divider} />
+          <InfoRow label="Vence" value={result.expiresAtText || "—"} />
+          <div style={styles.divider} />
+          <InfoRow label="Verificado" value={new Date().toLocaleString()} />
         </div>
 
         <Link to="/" style={styles.button}>
-          Volver a mi credencial
+          Volver
         </Link>
       </div>
 
       <div style={styles.footer}>
-        Consejo: si el miembro está revocado, aquí debe aparecer “❌ Revocado”.
+        Este verificador solo acepta códigos QR temporales generados por la app.
       </div>
     </div>
   );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <div style={styles.infoRow}>
+      <div style={styles.infoLabel}>{label}</div>
+      <div style={styles.infoValue}>{value}</div>
+    </div>
+  );
+}
+
+function formatSeconds(total) {
+  const value = Math.max(0, Number(total || 0));
+  const minutes = Math.floor(value / 60);
+  const seconds = value % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 const styles = {
@@ -139,6 +233,18 @@ const styles = {
     fontSize: 14,
   },
 
+  timerBox: {
+    marginTop: 14,
+    borderRadius: 16,
+    padding: 14,
+    textAlign: "center",
+    background: "#E0F2FE",
+    color: "#0C4A6E",
+    border: "1px solid #7DD3FC",
+  },
+  timerLabel: { fontSize: 12, fontWeight: 900, opacity: 0.85 },
+  timerValue: { marginTop: 4, fontSize: 34, fontWeight: 950, letterSpacing: 1 },
+
   infoBox: {
     marginTop: 14,
     borderRadius: 14,
@@ -146,9 +252,9 @@ const styles = {
     background: "#F1F5F9",
     color: "#0F172A",
   },
-  infoRow: { display: "flex", justifyContent: "space-between", gap: 12 },
+  infoRow: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" },
   infoLabel: { fontSize: 12, opacity: 0.75, fontWeight: 800 },
-  infoValue: { fontSize: 12, fontWeight: 900 },
+  infoValue: { fontSize: 12, fontWeight: 900, textAlign: "right" },
   divider: { height: 1, background: "#CBD5E1", margin: "10px 0" },
 
   button: {

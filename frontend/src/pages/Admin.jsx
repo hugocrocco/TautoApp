@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-const API_BASE = "http://localhost:8080";
+const API_BASE = window.location.origin;
 
 function normalizeRut(rut) {
   return (rut || "")
@@ -10,6 +10,43 @@ function normalizeRut(rut) {
     .replace(/\./g, "")
     .replace(/\s+/g, " ")
     .replace(/[^0-9K-]/g, "");
+}
+function formatDateCL(value) {
+  if (!value) return "";
+
+  const text = String(value).trim();
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
+    return text;
+  }
+
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`;
+  }
+
+  return text;
+}
+
+function dateCLToISO(value) {
+  if (!value) return null;
+
+  const text = String(value).trim();
+
+  const cl = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+  if (cl) {
+    return `${cl[3]}-${cl[2]}-${cl[1]}`;
+  }
+
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (iso) {
+    return text;
+  }
+
+  return text;
 }
 
 function prettyJson(obj) {
@@ -59,7 +96,7 @@ export default function Admin() {
   const [error, setError] = useState("");
   const [lastResponse, setLastResponse] = useState(null);
   const [notice, setNotice] = useState("Ingresa la clave admin para administrar el padrón.");
-  const [mode, setMode] = useState("create"); // create | edit
+  const [mode, setMode] = useState("create");
 
   const [rut, setRut] = useState("");
   const [nombreCompleto, setNombreCompleto] = useState("");
@@ -74,13 +111,18 @@ export default function Admin() {
   async function verifyAdminKey() {
     setAuthError("");
     setAuthLoading(true);
+
+    const cleanKey = draftKey.trim();
+
     try {
-      await apiFetch("/api/admin/health", { adminKey: draftKey.trim() });
-      localStorage.setItem("adminKey", draftKey.trim());
-      setAdminKey(draftKey.trim());
+      await apiFetch("/api/admin/users", { adminKey: cleanKey });
+      localStorage.setItem("adminKey", cleanKey);
+      setAdminKey(cleanKey);
       setNotice("Acceso admin concedido. Ahora puedes buscar, crear o actualizar socios.");
     } catch (e) {
-      setAuthError(`No autorizado o backend caído. (${e.status || ""}) ${e.message}`);
+      localStorage.removeItem("adminKey");
+      setAdminKey("");
+      setAuthError(`Clave incorrecta o backend caído. (${e.status || ""}) ${e.message}`);
     } finally {
       setAuthLoading(false);
     }
@@ -97,7 +139,7 @@ export default function Admin() {
   useEffect(() => {
     if (!adminKey) return;
 
-    apiFetch("/api/admin/health", { adminKey }).catch(() => {
+    apiFetch("/api/admin/users", { adminKey }).catch(() => {
       localStorage.removeItem("adminKey");
       setAdminKey("");
       setDraftKey("");
@@ -128,7 +170,7 @@ export default function Admin() {
       setTelefono(data.telefono || "");
       setEstadoSindicato(data.estadoSindicato || "ACTIVO");
       setAlDiaCuotas(Boolean(data.alDiaCuotas));
-      setUltimaCuotaPagada(data.ultimaCuotaPagada || "");
+      setUltimaCuotaPagada(formatDateCL(data.ultimaCuotaPagada || ""));
       setMode("edit");
       setNotice("Socio encontrado. Puedes actualizar sus datos y guardar.");
     } catch (e) {
@@ -165,7 +207,7 @@ export default function Admin() {
         telefono: telefono.trim() || null,
         estadoSindicato: (estadoSindicato || "ACTIVO").trim().toUpperCase(),
         alDiaCuotas: Boolean(alDiaCuotas),
-        ultimaCuotaPagada: ultimaCuotaPagada || null,
+        ultimaCuotaPagada: dateCLToISO(ultimaCuotaPagada),
       };
 
       const data = await apiFetch("/api/admin/members", {
@@ -207,7 +249,7 @@ export default function Admin() {
             <div style={styles.header}>
               <div style={styles.brandRow}>
                 <div style={styles.logoWrap}>
-                  <img src="/logo-sindicato.png" alt="VMC" style={styles.logo} />
+                  <img src="/logo-sindicato.png" alt="Sindicato Humboldt" style={styles.logo} />
                 </div>
                 <div>
                   <div style={styles.org}>Sindicato Humboldt</div>
@@ -218,6 +260,7 @@ export default function Admin() {
 
             <div style={styles.form}>
               <div style={styles.notice}>{notice}</div>
+
               <label style={styles.label}>
                 Clave admin
                 <input
@@ -258,37 +301,49 @@ export default function Admin() {
           <div style={styles.header}>
             <div style={styles.brandRow}>
               <div style={styles.logoWrap}>
-                <img src="/logo-sindicato.png" alt="VMC" style={styles.logo} />
+                <img src="/logo-sindicato.png" alt="Sindicato Humboldt" style={styles.logo} />
               </div>
               <div>
-                <div style={styles.org}>Valparaíso Moto Club</div>
+                <div style={styles.org}>Sindicato Humboldt</div>
                 <div style={styles.orgSub}>Panel Administrador</div>
               </div>
             </div>
 
             <div style={styles.topActions}>
-  <button style={styles.smallBtn} onClick={limpiar}>
-    Nuevo socio
-  </button>
+              <button style={styles.smallBtn} onClick={limpiar}>
+                Nuevo socio
+              </button>
 
-  <Link to="/admin/members" style={{ textDecoration: "none", flex: 1 }}>
-    <div style={{ ...styles.smallBtn, textAlign: "center" }}>
-      Ver socios
-    </div>
-  </Link>
+              <Link to="/admin/members" style={{ textDecoration: "none", flex: 1 }}>
+                <div style={{ ...styles.smallBtn, textAlign: "center" }}>
+                  Ver socios
+                </div>
+              </Link>
 
-  <button
-    style={{ ...styles.smallBtn, background: "rgba(255,255,255,0.16)" }}
-    onClick={logout}
-  >
-    Salir
-  </button>
-</div>
+              <Link to="/admin/benefits" style={{ textDecoration: "none", flex: 1 }}>
+                <div style={{ ...styles.smallBtn, textAlign: "center", background: "#5CC6C8", color: "#0B1F3A" }}>
+                  Beneficios
+                </div>
+              </Link>
+
+              <Link to="/admin/messages" style={{ textDecoration: "none", flex: 1 }}>
+                <div style={{ ...styles.smallBtn, textAlign: "center", background: "#5CC6C8", color: "#0B1F3A" }}>
+                  Mensajes
+                </div>
+              </Link>
+
+              <button
+                style={{ ...styles.smallBtn, background: "rgba(255,255,255,0.16)" }}
+                onClick={logout}
+              >
+                Salir
+              </button>
+            </div>
           </div>
 
           <div style={styles.bodyRow}>
             <div style={styles.dataCol}>
-              <div style={styles.name}>Miembros (padrón)</div>
+              <div style={styles.name}>Miembros del padrón</div>
               <div style={styles.subTitle}>
                 {mode === "edit"
                   ? "Editando socio encontrado"
@@ -299,9 +354,12 @@ export default function Admin() {
                 <div style={styles.notice}>
                   <strong>Qué puedes hacer aquí</strong>
                   <div style={{ marginTop: 6 }}>
-                    • Buscar un socio por RUT<br />
-                    • Crear un socio nuevo<br />
-                    • Actualizar estado sindical y cuotas<br />
+                    • Buscar un socio por RUT
+                    <br />
+                    • Crear un socio nuevo
+                    <br />
+                    • Actualizar estado sindical y cuotas
+                    <br />
                     • Corregir email y teléfono
                   </div>
                 </div>
@@ -322,7 +380,12 @@ export default function Admin() {
                   <button style={styles.button} onClick={buscar} disabled={busy}>
                     {busy ? "Buscando..." : "Buscar socio"}
                   </button>
-                  <button style={{ ...styles.button, background: "#5CC6C8", color: "#0B1F3A" }} onClick={limpiar} disabled={busy}>
+
+                  <button
+                    style={{ ...styles.button, background: "#5CC6C8", color: "#0B1F3A" }}
+                    onClick={limpiar}
+                    disabled={busy}
+                  >
                     Limpiar
                   </button>
                 </div>
@@ -377,7 +440,7 @@ export default function Admin() {
                       value={ultimaCuotaPagada}
                       onChange={(e) => setUltimaCuotaPagada(e.target.value)}
                       style={styles.input}
-                      placeholder="YYYY-MM-DD"
+                      placeholder="DD/MM/AAAA"
                     />
                   </label>
                 </div>
@@ -455,7 +518,7 @@ const styles = {
     opacity: 0.9,
     letterSpacing: 1.2,
   },
-  topActions: { display: "flex", gap: 8, justifyContent: "space-between" },
+  topActions: { display: "flex", gap: 8, justifyContent: "space-between", flexWrap: "wrap" },
   smallBtn: {
     flex: 1,
     padding: "10px 12px",

@@ -22,7 +22,7 @@ public class OciObjectStorageConfig {
     public ObjectStorage objectStorageClient() throws Exception {
 
         // Lee el archivo ~/.oci/config usando el profile indicado (por defecto: DEFAULT)
-        String configPath = System.getProperty("user.home") + "/.oci/config";
+        String configPath = "/home/opc/.oci/config";
 
         ConfigFileReader.ConfigFile configFile =
                 ConfigFileReader.parse(configPath, profile);
