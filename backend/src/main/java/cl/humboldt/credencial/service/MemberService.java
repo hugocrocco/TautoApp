@@ -21,14 +21,14 @@ public class MemberService {
         this.memberRepository = memberRepository;
     }
 
-    public List<MemberResponse> listAll() {
-        return memberRepository.findAll().stream()
+    public List<MemberResponse> listAll(Long institucionId) {
+        return memberRepository.findAllByInstitucionId(institucionId).stream()
                 .sorted(Comparator.comparing(Member::getNombreCompleto, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .map(this::toResponse)
                 .toList();
     }
 
-    public MemberResponse upsert(MemberUpsertRequest req) {
+    public MemberResponse upsert(Long institucionId, MemberUpsertRequest req) {
         String rut = normalizeRut(req.getRut());
         if (rut.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RUT es obligatorio");
@@ -37,7 +37,8 @@ public class MemberService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "nombreCompleto es obligatorio");
         }
 
-        Member member = memberRepository.findByRut(rut).orElseGet(Member::new);
+        Member member = memberRepository.findByInstitucionIdAndRut(institucionId, rut).orElseGet(Member::new);
+        member.setInstitucionId(institucionId);
 
         member.setRut(rut);
         member.setNombreCompleto(req.getNombreCompleto().trim());
@@ -61,9 +62,9 @@ public class MemberService {
         return toResponse(saved);
     }
 
-    public MemberResponse getByRut(String rutRaw) {
+    public MemberResponse getByRut(Long institucionId, String rutRaw) {
         String rut = normalizeRut(rutRaw);
-        Member member = memberRepository.findByRut(rut)
+        Member member = memberRepository.findByInstitucionIdAndRut(institucionId, rut)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Miembro no encontrado"));
         return toResponse(member);
     }

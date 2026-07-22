@@ -1,7 +1,12 @@
 package cl.humboldt.credencial.controller;
 
+import cl.humboldt.credencial.service.StorageService;
+import com.oracle.bmc.objectstorage.responses.GetObjectResponse;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
+import cl.humboldt.credencial.tenant.InstitutionResolver;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
@@ -21,13 +26,23 @@ import java.util.Map;
 @RequestMapping("/api/benefits")
 public class BenefitsController {
 
+  private static final String OCI_BENEFITS_FOLDER = "hbdt/benefits/";
+
   private final JdbcTemplate jdbc;
+  private final StorageService storageService;
+  private final InstitutionResolver institutionResolver;
 
   @Value("${app.benefits-upload-dir:uploads/benefits}")
   private String uploadDir;
 
-  public BenefitsController(JdbcTemplate jdbc) {
+  public BenefitsController(
+      JdbcTemplate jdbc,
+      StorageService storageService,
+      InstitutionResolver institutionResolver
+  ) {
     this.jdbc = jdbc;
+    this.storageService = storageService;
+    this.institutionResolver = institutionResolver;
   }
 
   @PostConstruct
@@ -35,6 +50,7 @@ public class BenefitsController {
     jdbc.execute("""
         CREATE TABLE IF NOT EXISTS benefits (
           id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          institucion_id BIGINT NOT NULL,
           title VARCHAR(160) NOT NULL,
           zone VARCHAR(20) NOT NULL,
           short_info VARCHAR(500) NOT NULL,
@@ -48,27 +64,32 @@ public class BenefitsController {
   }
 
   @GetMapping
-  public Map<String, Object> list(@RequestParam(required = false) String zone) {
-    String z = normalizeZone(zone);
+  public Map<String, Object> list(@RequestParam(required = false) String zone, HttpServletRequest request) {
+    Long institutionId = institutionResolver.resolveInstitutionId(request);
+    String normalizedZone = normalizeZone(zone);
     List<Map<String, Object>> rows;
 
-    if (z.isBlank()) {
+    if (normalizedZone.isBlank()) {
       rows = jdbc.queryForList("""
-          SELECT id, title, zone, short_info, pdf_filename, pdf_original_name, active, created_at, updated_at
+          SELECT id, title, zone, short_info, pdf_filename,
+                 pdf_original_name, active, created_at, updated_at
           FROM benefits
-          WHERE active = TRUE
+          WHERE institucion_id = ? AND active = TRUE
           ORDER BY zone ASC, title ASC
-          """);
+          """, institutionId);
     } else {
       rows = jdbc.queryForList("""
-          SELECT id, title, zone, short_info, pdf_filename, pdf_original_name, active, created_at, updated_at
+          SELECT id, title, zone, short_info, pdf_filename,
+                 pdf_original_name, active, created_at, updated_at
           FROM benefits
-          WHERE active = TRUE AND zone = ?
+          WHERE institucion_id = ? AND active = TRUE AND zone = ?
           ORDER BY title ASC
-          """, z);
+          """, institutionId, normalizedZone);
     }
 
-    List<Map<String, Object>> benefits = rows.stream().map(this::toDto).toList();
+    List<Map<String, Object>> benefits = rows.stream()
+        .map(this::toDto)
+        .toList();
 
     return Map.of(
         "ok", true,
@@ -78,39 +99,122 @@ public class BenefitsController {
   }
 
   @GetMapping("/{id}/pdf")
-  public ResponseEntity<Resource> downloadPdf(@PathVariable Long id) throws MalformedURLException {
+  public ResponseEntity<Resource> downloadPdf(@PathVariable Long id, HttpServletRequest request) {
+    Long institutionId = institutionResolver.resolveInstitutionId(request);
     List<Map<String, Object>> rows = jdbc.queryForList("""
         SELECT pdf_filename, pdf_original_name
         FROM benefits
-        WHERE id = ? AND active = TRUE
+        WHERE id = ? AND institucion_id = ? AND active = TRUE
         LIMIT 1
-        """, id);
+        """, id, institutionId);
 
     if (rows.isEmpty()) {
       return ResponseEntity.notFound().build();
     }
 
-    String fileName = stringValue(rows.get(0).get("pdf_filename"));
+    String storedName = stringValue(rows.get(0).get("pdf_filename"));
     String originalName = stringValue(rows.get(0).get("pdf_original_name"));
 
-    if (fileName.isBlank()) {
+    if (storedName.isBlank()) {
       return ResponseEntity.notFound().build();
     }
 
-    Path base = Path.of(uploadDir).toAbsolutePath().normalize();
-    Path file = base.resolve(fileName).normalize();
+    String downloadName = originalName.isBlank()
+        ? fallbackDownloadName(storedName)
+        : originalName;
 
-    if (!file.startsWith(base) || !Files.exists(file)) {
-      return ResponseEntity.notFound().build();
+    if (isOciObject(storedName)) {
+      return downloadFromOci(storedName, downloadName);
     }
 
-    Resource resource = new UrlResource(file.toUri());
-    String downloadName = originalName.isBlank() ? fileName : originalName;
+    return downloadLegacyLocalFile(storedName, downloadName);
+  }
 
-    return ResponseEntity.ok()
-        .contentType(MediaType.APPLICATION_PDF)
-        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + safeDownloadName(downloadName) + "\"")
-        .body(resource);
+  private ResponseEntity<Resource> downloadFromOci(
+      String objectName,
+      String downloadName
+  ) {
+    try {
+      if (!storageService.exists(objectName)) {
+        return ResponseEntity.notFound().build();
+      }
+
+      GetObjectResponse response = storageService.download(objectName);
+      InputStreamResource resource =
+          new InputStreamResource(response.getInputStream());
+
+      ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+          .contentType(MediaType.APPLICATION_PDF)
+          .header(
+              HttpHeaders.CONTENT_DISPOSITION,
+              contentDisposition(downloadName)
+          );
+
+      if (response.getContentLength() != null
+          && response.getContentLength() >= 0) {
+        builder.contentLength(response.getContentLength());
+      }
+
+      return builder.body(resource);
+
+    } catch (Exception exception) {
+      return ResponseEntity.internalServerError().build();
+    }
+  }
+
+  /*
+   * Compatibilidad con beneficios antiguos:
+   * si pdf_filename contiene solamente el UUID antiguo, todavía se busca
+   * en uploads/benefits. Los beneficios nuevos se descargan desde OCI.
+   */
+  private ResponseEntity<Resource> downloadLegacyLocalFile(
+      String fileName,
+      String downloadName
+  ) {
+    try {
+      Path base = Path.of(uploadDir).toAbsolutePath().normalize();
+      Path file = base.resolve(fileName).normalize();
+
+      if (!file.startsWith(base) || !Files.exists(file)) {
+        return ResponseEntity.notFound().build();
+      }
+
+      Resource resource = new UrlResource(file.toUri());
+
+      return ResponseEntity.ok()
+          .contentType(MediaType.APPLICATION_PDF)
+          .header(
+              HttpHeaders.CONTENT_DISPOSITION,
+              contentDisposition(downloadName)
+          )
+          .contentLength(Files.size(file))
+          .body(resource);
+
+    } catch (MalformedURLException exception) {
+      return ResponseEntity.internalServerError().build();
+
+    } catch (Exception exception) {
+      return ResponseEntity.internalServerError().build();
+    }
+  }
+
+  private boolean isOciObject(String storedName) {
+    return storedName.startsWith(OCI_BENEFITS_FOLDER);
+  }
+
+  private String contentDisposition(String fileName) {
+    return "attachment; filename=\""
+        + safeDownloadName(fileName)
+        + "\"";
+  }
+
+  private String fallbackDownloadName(String storedName) {
+    int slash = storedName.lastIndexOf('/');
+    String fileName = slash >= 0
+        ? storedName.substring(slash + 1)
+        : storedName;
+
+    return fileName.isBlank() ? "beneficio.pdf" : fileName;
   }
 
   private Map<String, Object> toDto(Map<String, Object> row) {
@@ -124,26 +228,45 @@ public class BenefitsController {
     dto.put("shortInfo", stringValue(row.get("short_info")));
     dto.put("active", boolValue(row.get("active")));
     dto.put("hasPdf", !pdf.isBlank());
-    dto.put("pdfUrl", pdf.isBlank() ? "" : "/api/benefits/" + id + "/pdf");
-    dto.put("pdfOriginalName", stringValue(row.get("pdf_original_name")));
+    dto.put(
+        "pdfUrl",
+        pdf.isBlank() ? "" : "/api/benefits/" + id + "/pdf"
+    );
+    dto.put(
+        "pdfOriginalName",
+        stringValue(row.get("pdf_original_name"))
+    );
     dto.put("createdAt", stringValue(row.get("created_at")));
     dto.put("updatedAt", stringValue(row.get("updated_at")));
+
     return dto;
   }
 
   private String normalizeZone(String value) {
     String text = clean(value).toUpperCase();
-    if (text.equals("NORTE")) return "NORTE";
-    if (text.equals("SUR") || text.equals("ZUR")) return "SUR";
+
+    if (text.equals("NORTE")) {
+      return "NORTE";
+    }
+
+    if (text.equals("SUR") || text.equals("ZUR")) {
+      return "SUR";
+    }
+
     return "";
   }
 
   private String clean(String value) {
-    return value == null ? "" : value.trim().replaceAll("\\s+", " ");
+    return value == null
+        ? ""
+        : value.trim().replaceAll("\\s+", " ");
   }
 
   private String safeDownloadName(String value) {
-    String clean = value == null ? "beneficio.pdf" : value.replaceAll("[\\r\\n\\\\/]+", "_").trim();
+    String clean = value == null
+        ? "beneficio.pdf"
+        : value.replaceAll("[\\r\\n\\\\/\"]+", "_").trim();
+
     return clean.isBlank() ? "beneficio.pdf" : clean;
   }
 
@@ -152,13 +275,27 @@ public class BenefitsController {
   }
 
   private Long longValue(Object value) {
-    if (value instanceof Number n) return n.longValue();
-    try { return Long.parseLong(String.valueOf(value)); } catch (Exception e) { return 0L; }
+    if (value instanceof Number number) {
+      return number.longValue();
+    }
+
+    try {
+      return Long.parseLong(String.valueOf(value));
+    } catch (Exception exception) {
+      return 0L;
+    }
   }
 
   private boolean boolValue(Object value) {
-    if (value instanceof Boolean b) return b;
-    if (value instanceof Number n) return n.intValue() == 1;
-    return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
+    if (value instanceof Boolean booleanValue) {
+      return booleanValue;
+    }
+
+    if (value instanceof Number number) {
+      return number.intValue() == 1;
+    }
+
+    return "true".equalsIgnoreCase(String.valueOf(value))
+        || "1".equals(String.valueOf(value));
   }
 }

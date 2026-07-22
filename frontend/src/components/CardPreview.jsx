@@ -18,75 +18,171 @@ function resolvePhotoSrc(member) {
 
   if (value.startsWith("data:image")) return value;
   if (value.startsWith("/api/")) return value;
-  if (value.startsWith("http://") || value.startsWith("https://")) return value;
 
-  const looksBase64 = value.length > 100 && /^[A-Za-z0-9+/=]+$/.test(value);
-  if (looksBase64) return `data:image/jpeg;base64,${value}`;
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://")
+  ) {
+    return value;
+  }
+
+  const looksBase64 =
+    value.length > 100 &&
+    /^[A-Za-z0-9+/=]+$/.test(value);
+
+  if (looksBase64) {
+    return `data:image/jpeg;base64,${value}`;
+  }
 
   return "";
 }
 
-export default function CardPreview({ member, qrValue, status, qrLoading, qrError, qrTimer }) {
+export default function CardPreview({
+  member,
+  qrValue,
+  status,
+  qrLoading,
+  qrError,
+  qrTimer,
+  onPhotoClick,
+}) {
   const photoSrc = resolvePhotoSrc(member);
   const [imgFailed, setImgFailed] = useState(false);
-  const isValid = status === "VALID" || (member?.statusLabel || "").toUpperCase().includes("VIGENTE");
+
+  const isValid =
+    status === "VALID" ||
+    (member?.statusLabel || "")
+      .toUpperCase()
+      .includes("VIGENTE");
 
   useEffect(() => {
     setImgFailed(false);
   }, [photoSrc, member?.credentialCode]);
+
+  function handlePhotoClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (typeof onPhotoClick === "function") {
+      onPhotoClick();
+    }
+  }
+
+  function stopFlipEvent(event) {
+    event.stopPropagation();
+  }
 
   return (
     <div style={styles.card}>
       <div style={styles.header}>
         <div style={styles.brandRow}>
           <div style={styles.logoWrap}>
-            <img src="/logo-sindicato.png" alt="Logo Sindicato Humboldt" style={styles.logo} />
+            <img
+              src="/logo-sindicato.png"
+              alt="Logo Sindicato Humboldt"
+              style={styles.logo}
+            />
           </div>
+
           <div>
-            <div style={styles.org}>Sindicato Humboldt</div>
-            <div style={styles.orgSub}>VMC</div>
+            <div style={styles.org}>
+              Sindicato Humboldt
+            </div>
+
+            <div style={styles.orgSub}>
+              VMC
+            </div>
           </div>
         </div>
       </div>
 
       <div style={styles.bodyRow}>
-        <div style={styles.photoBox}>
-          {photoSrc && !imgFailed ? (
-            <img
-              src={photoSrc}
-              alt="Foto socio"
-              style={styles.photoImg}
-              onError={() => setImgFailed(true)}
-            />
-          ) : (
-            <span style={styles.photoPlaceholder}>FOTO</span>
-          )}
+        <div
+          style={styles.photoColumn}
+          data-no-flip="true"
+          onClick={stopFlipEvent}
+        >
+          <button
+            type="button"
+            style={styles.photoButton}
+            onClick={handlePhotoClick}
+            aria-label="Cambiar fotografía"
+            title="Cambiar fotografía"
+          >
+            <div style={styles.photoBox}>
+              {photoSrc && !imgFailed ? (
+                <img
+                  src={photoSrc}
+                  alt="Foto socio"
+                  style={styles.photoImg}
+                  onError={() =>
+                    setImgFailed(true)
+                  }
+                  draggable={false}
+                />
+              ) : (
+                <span
+                  style={styles.photoPlaceholder}
+                >
+                  FOTO
+                </span>
+              )}
+            </div>
+
+            <span style={styles.changePhotoText}>
+              📷 Cambiar foto
+            </span>
+          </button>
         </div>
 
         <div style={styles.dataCol}>
-          <div style={styles.name}>{member?.displayName || "Nombre Socio"}</div>
+          <div style={styles.name}>
+            {member?.displayName || "Nombre Socio"}
+          </div>
 
           <div style={styles.fieldBlock}>
             <span style={styles.label}>RUT</span>
-            <span style={styles.value}>{member?.rutMasked || "—"}</span>
+
+            <span style={styles.value}>
+              {member?.rutMasked || "—"}
+            </span>
           </div>
 
           <div style={styles.fieldBlock}>
-            <span style={styles.label}>Sección</span>
-            <span style={styles.value}>{member?.section || "Sindicato Humboldt"}</span>
+            <span style={styles.label}>
+              Sección
+            </span>
+
+            <span style={styles.value}>
+              {member?.section ||
+                "Sindicato Humboldt"}
+            </span>
           </div>
 
-          <div style={{ ...styles.statusChip, ...(isValid ? styles.statusValid : styles.statusInvalid) }}>
-            {member?.statusLabel || "MIEMBRO VIGENTE"}
+          <div
+            style={{
+              ...styles.statusChip,
+              ...(isValid
+                ? styles.statusValid
+                : styles.statusInvalid),
+            }}
+          >
+            {member?.statusLabel ||
+              "MIEMBRO VIGENTE"}
           </div>
 
-          <div style={styles.code}>Código: {member?.credentialCode || "VMC-0000"}</div>
+          <div style={styles.code}>
+            Código:{" "}
+            {member?.credentialCode ||
+              "VMC-0000"}
+          </div>
         </div>
       </div>
 
       <div style={styles.qrRow}>
         <div style={styles.qrWrap}>
           <QrBox value={qrValue} />
+
           <div style={styles.qrCaption}>
             {qrLoading
               ? "Generando QR seguro…"
@@ -101,64 +197,156 @@ export default function CardPreview({ member, qrValue, status, qrLoading, qrErro
 }
 
 const styles = {
-  /*card: {
-    width: "100%",
-    borderRadius: 24,
-    padding: 18,
-    background: "linear-gradient(180deg, #12385A 0%, #1E4E75 100%)",
-    color: "white",
-    fontFamily: "system-ui",
-    boxShadow: "0 18px 38px rgba(0,0,0,0.45)",
-    boxSizing: "border-box",
-  },*/
   card: {
     borderRadius: 24,
     padding: 16,
     background: "#12385A",
     color: "white",
-    boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
+    boxShadow:
+      "0 20px 40px rgba(0,0,0,0.40)",
   },
-  header: { marginBottom: 10 },
-  brandRow: { display: "flex", alignItems: "center", gap: 10 },
+
+  header: {
+    marginBottom: 10,
+  },
+
+  brandRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+
   logoWrap: {
     width: 128,
     height: 128,
     borderRadius: 14,
     background: "rgba(0,0,0,0.22)",
-    border: "1px solid rgba(255,255,255,0.18)",
+    border:
+      "1px solid rgba(255,255,255,0.18)",
     display: "grid",
     placeItems: "center",
     overflow: "hidden",
   },
-  logo: { width: 120, height: 120, objectFit: "contain" },
-  org: { fontSize: 18, fontWeight: 900, letterSpacing: 0.4 },
-  orgSub: { fontSize: 11, textTransform: "uppercase", opacity: 0.9, letterSpacing: 1.2 },
+
+  logo: {
+    width: 120,
+    height: 120,
+    objectFit: "contain",
+  },
+
+  org: {
+    fontSize: 18,
+    fontWeight: 900,
+    letterSpacing: 0.4,
+  },
+
+  orgSub: {
+    fontSize: 11,
+    textTransform: "uppercase",
+    opacity: 0.9,
+    letterSpacing: 1.2,
+  },
 
   bodyRow: {
     display: "grid",
     gridTemplateColumns: "110px 1fr",
     gap: 14,
-    alignItems: "center",
+    alignItems: "start",
   },
+
+  photoColumn: {
+    width: 100,
+    position: "relative",
+    zIndex: 50,
+  },
+
+  photoButton: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 7,
+    width: "100%",
+    padding: 0,
+    border: "none",
+    background: "transparent",
+    color: "#FFFFFF",
+    cursor: "pointer",
+    appearance: "none",
+    WebkitAppearance: "none",
+    touchAction: "manipulation",
+    WebkitTapHighlightColor: "transparent",
+  },
+
   photoBox: {
     width: 100,
     height: 120,
+    padding: 0,
     borderRadius: 18,
     background: "rgba(0,0,0,0.25)",
-    border: "1px solid rgba(255,255,255,0.25)",
+    border:
+      "1px solid rgba(255,255,255,0.25)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    boxSizing: "border-box",
   },
-  photoImg: { width: "100%", height: "100%", objectFit: "cover" },
-  photoPlaceholder: { fontSize: 11, letterSpacing: 1.2 },
 
-  dataCol: { display: "grid", gap: 4 },
-  name: { fontSize: 18, fontWeight: 900 },
-  fieldBlock: { display: "flex", justifyContent: "space-between", fontSize: 12 },
-  label: { opacity: 0.85 },
-  value: { fontWeight: 600 },
+  photoImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    pointerEvents: "none",
+    userSelect: "none",
+  },
+
+  photoPlaceholder: {
+    fontSize: 11,
+    letterSpacing: 1.2,
+    pointerEvents: "none",
+  },
+
+  changePhotoText: {
+    display: "grid",
+    placeItems: "center",
+    width: "100%",
+    minHeight: 31,
+    padding: "6px 4px",
+    border:
+      "1px solid rgba(255,255,255,0.28)",
+    borderRadius: 9,
+    background: "rgba(11,31,58,0.92)",
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: 900,
+    lineHeight: 1.1,
+    boxSizing: "border-box",
+    pointerEvents: "none",
+  },
+
+  dataCol: {
+    display: "grid",
+    gap: 4,
+  },
+
+  name: {
+    fontSize: 18,
+    fontWeight: 900,
+  },
+
+  fieldBlock: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: 12,
+  },
+
+  label: {
+    opacity: 0.85,
+  },
+
+  value: {
+    fontWeight: 600,
+  },
+
   statusChip: {
     marginTop: 4,
     alignSelf: "flex-start",
@@ -167,21 +355,47 @@ const styles = {
     fontSize: 11,
     fontWeight: 800,
     background: "rgba(0,0,0,0.35)",
-    border: "1px solid rgba(255,255,255,0.4)",
+    border:
+      "1px solid rgba(255,255,255,0.4)",
   },
+
   statusValid: {
     background: "rgba(92,198,200,0.22)",
-    border: "1px solid rgba(92,198,200,0.75)",
+    border:
+      "1px solid rgba(92,198,200,0.75)",
     color: "#D9FFFF",
   },
+
   statusInvalid: {
     background: "rgba(255,107,107,0.20)",
-    border: "1px solid rgba(255,107,107,0.75)",
+    border:
+      "1px solid rgba(255,107,107,0.75)",
     color: "#FFECEC",
   },
-  code: { marginTop: 2, fontSize: 11, opacity: 0.9 },
 
-  qrRow: { marginTop: 14, display: "flex", justifyContent: "flex-end" },
-  qrWrap: { display: "grid", justifyItems: "center", gap: 6 },
-  qrCaption: { fontSize: 11, fontWeight: 800, color: "#D9FFFF", textAlign: "center", maxWidth: 220 },
+  code: {
+    marginTop: 2,
+    fontSize: 11,
+    opacity: 0.9,
+  },
+
+  qrRow: {
+    marginTop: 14,
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+
+  qrWrap: {
+    display: "grid",
+    justifyItems: "center",
+    gap: 6,
+  },
+
+  qrCaption: {
+    fontSize: 11,
+    fontWeight: 800,
+    color: "#D9FFFF",
+    textAlign: "center",
+    maxWidth: 220,
+  },
 };

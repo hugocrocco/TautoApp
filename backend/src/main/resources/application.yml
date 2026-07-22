@@ -1,16 +1,21 @@
 server:
-  address: 0.0.0.0
+  address: 127.0.0.1
   port: 8080
 
 spring:
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/tauto_core?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
-    password: 1234
+    password: "1234"
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
@@ -37,7 +42,8 @@ oci:
 app:
   admin-key: "hbdt"
   credential-ttl-seconds: 180
-  credential-secret: "cambia-este-secreto-en-produccion"
+  credential-secret: "TU_SECRETO_CREDENCIAL"
+  library-upload-dir: "uploads/library"
   benefits-upload-dir: "uploads/benefits"
   mail:
     from: SindicatoHbdt@Tauto.cl

@@ -1,5 +1,21 @@
 ﻿import { useState } from "react";
 import { Link } from "react-router-dom";
+
+import { AuthLayout } from "../layouts";
+import {
+  Button,
+  Input,
+  PasswordInput,
+} from "../components/ui";
+import {
+  colors,
+  globals,
+  inputs,
+  radius,
+  spacing,
+  typography,
+} from "../theme";
+
 import { registerWithPhoto } from "../services/authService";
 
 export default function Register() {
@@ -10,38 +26,69 @@ export default function Register() {
   const [emailConfirm, setEmailConfirm] = useState("");
   const [telefono, setTelefono] = useState("");
   const [direccion, setDireccion] = useState("");
-  const [loading, setLoading] = useState(false);
   const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [passwordConfirm, setPasswordConfirm] =
+    useState("");
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
+  const clearError = () => {
+    if (error) {
+      setError("");
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    const displayNameClean = displayName.trim();
+    const rutClean = rut.trim();
     const emailClean = email.trim().toLowerCase();
-    const emailConfirmClean = emailConfirm.trim().toLowerCase();
+    const emailConfirmClean = emailConfirm
+      .trim()
+      .toLowerCase();
+    const telefonoClean = telefono.trim();
+    const direccionClean = direccion.trim();
+
+    setError("");
+
+    if (!displayNameClean) {
+      setError("Debes ingresar tu nombre completo.");
+      return;
+    }
+
+    if (!rutClean) {
+      setError("Debes ingresar tu RUT.");
+      return;
+    }
 
     if (!emailClean || !emailConfirmClean) {
-      alert("Debes ingresar y confirmar el correo electrÃ³nico.");
+      setError(
+        "Debes ingresar y confirmar el correo electrónico."
+      );
       return;
     }
 
     if (emailClean !== emailConfirmClean) {
-      alert("Los correos electrÃ³nicos no coinciden.");
+      setError("Los correos electrónicos no coinciden.");
       return;
     }
 
     if (!password || !passwordConfirm) {
-      alert("Debes ingresar y confirmar la clave.");
+      setError("Debes ingresar y confirmar la clave.");
       return;
     }
 
     if (password !== passwordConfirm) {
-      alert("Las claves no coinciden.");
+      setError("Las claves no coinciden.");
       return;
     }
 
     if (password.length < 6) {
-      alert("La clave debe tener al menos 6 caracteres.");
+      setError(
+        "La clave debe tener al menos 6 caracteres."
+      );
       return;
     }
 
@@ -49,271 +96,336 @@ export default function Register() {
 
     try {
       const result = await registerWithPhoto({
-        displayName,
-        rut,
+        displayName: displayNameClean,
+        rut: rutClean,
         password,
         photoFile,
         email: emailClean,
-        telefono,
-        direccion,
+        telefono: telefonoClean,
+        direccion: direccionClean,
       });
 
       console.log("REGISTER OK:", result);
-      window.location.href = `/#/verify-email?rut=${encodeURIComponent(result?.rut || rut)}&email=${encodeURIComponent(result?.email || emailClean)}`;
-    } catch (err) {
-      console.error("REGISTER ERROR:", err);
-      alert(err.message);
+
+      const resultRut = result?.rut || rutClean;
+      const resultEmail = result?.email || emailClean;
+
+      window.location.href =
+        `/#/verify-email?rut=${encodeURIComponent(
+          resultRut
+        )}&email=${encodeURIComponent(resultEmail)}`;
+    } catch (registerError) {
+      console.error("REGISTER ERROR:", registerError);
+
+      setError(
+        registerError.message ||
+          "No se pudo completar el registro. Intenta nuevamente."
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  const styles = {
+    logoSection: {
+      display: "flex",
+      justifyContent: "center",
+    },
+
+    logoWrap: {
+      width: 112,
+      height: 112,
+      display: "grid",
+      placeItems: "center",
+      overflow: "hidden",
+      borderRadius: radius.large,
+      border: "1px solid rgba(255,255,255,0.18)",
+      background: "rgba(255,255,255,0.10)",
+    },
+
+    logo: {
+      width: 104,
+      height: 104,
+      objectFit: "contain",
+    },
+
+    form: {
+      width: "100%",
+      display: "flex",
+      flexDirection: "column",
+      gap: spacing.md,
+    },
+
+    sectionTitle: {
+      margin: `${spacing.sm}px 0 0`,
+      paddingBottom: spacing.sm,
+      borderBottom:
+        "1px solid rgba(255,255,255,0.10)",
+      color: colors.textSecondary,
+      fontSize: typography.size.small,
+      fontWeight: typography.weight.bold,
+      textTransform: "uppercase",
+      letterSpacing: 0.8,
+    },
+
+    fileGroup: {
+      width: "100%",
+    },
+
+    fileLabel: {
+      display: "block",
+      marginBottom: spacing.xs,
+      color: colors.textSecondary,
+      fontSize: typography.size.small,
+      fontWeight: typography.weight.bold,
+    },
+
+    fileInput: {
+      ...inputs.input,
+      cursor: loading ? "not-allowed" : "pointer",
+      opacity: loading ? 0.65 : 1,
+    },
+
+    selectedFile: {
+      margin: `${spacing.xs}px 0 0`,
+      color: colors.textMuted,
+      fontSize: typography.size.small,
+      lineHeight: typography.lineHeight.normal,
+      overflowWrap: "anywhere",
+    },
+
+    error: {
+      ...globals.errorBox,
+      textAlign: "center",
+    },
+
+    helper: {
+      margin: 0,
+      color: colors.textMuted,
+      fontSize: typography.size.small,
+      lineHeight: typography.lineHeight.normal,
+      textAlign: "center",
+    },
+
+    footer: {
+      paddingTop: spacing.sm,
+      borderTop:
+        "1px solid rgba(255,255,255,0.10)",
+      textAlign: "center",
+    },
+
+    link: {
+      color: colors.textSecondary,
+      textDecoration: "none",
+      fontSize: typography.size.small,
+      fontWeight: typography.weight.bold,
+    },
+  };
+
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <div style={styles.header}>
-            <div style={styles.brandRow}>
-              <div style={styles.logoWrap}>
-                <img src="/logo-sindicato.png" alt="VMC" style={styles.logo} />
-              </div>
-              <div>
-                <div style={styles.org}>Sindicato Humboldt</div>
-                <div style={styles.orgSub}>Registro de usuario</div>
-              </div>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} style={styles.form}>
-            <label style={styles.label}>
-              Nombre completo
-              <input
-                style={styles.input}
-                placeholder="Nombre completo"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                required
-              />
-            </label>
-
-            <label style={styles.label}>
-              RUT
-              <input
-                style={styles.input}
-                placeholder="RUT"
-                value={rut}
-                onChange={(e) => setRut(e.target.value)}
-                required
-              />
-            </label>
-
-            <label style={styles.label}>
-              Email
-              <input
-                style={styles.input}
-                type="email"
-                placeholder="correo@dominio.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </label>
-
-            <label style={styles.label}>
-              Confirmar email
-              <input
-                style={styles.input}
-                type="email"
-                placeholder="Repite tu correo"
-                value={emailConfirm}
-                onChange={(e) => setEmailConfirm(e.target.value)}
-                required
-              />
-            </label>
-
-            <label style={styles.label}>
-              TelÃ©fono
-              <input
-                style={styles.input}
-                placeholder="+56 9 ..."
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
-              />
-            </label>
-
-            <label style={styles.label}>
-              DirecciÃ³n
-              <input
-                style={styles.input}
-                placeholder="DirecciÃ³n de casa"
-                value={direccion}
-                onChange={(e) => setDireccion(e.target.value)}
-              />
-            </label>
-
-            <label style={styles.label}>
-              Clave
-              <input
-                style={styles.input}
-                type="password"
-                placeholder="Clave"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </label>
-
-            <label style={styles.label}>
-              Confirmar clave
-              <input
-                style={styles.input}
-                type="password"
-                placeholder="Repite tu clave"
-                value={passwordConfirm}
-                onChange={(e) => setPasswordConfirm(e.target.value)}
-                required
-              />
-            </label>
-
-            <label style={styles.label}>
-              Foto
-              <input
-                style={styles.fileInput}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-              />
-            </label>
-
-            <button type="submit" disabled={loading} style={styles.button}>
-              {loading ? "Registrando..." : "Registrar"}
-            </button>
-          </form>
-
-          <div style={styles.footerRow}>
-            <Link to="/" style={styles.link}>
-              Volver al inicio
-            </Link>
-          </div>
+    <AuthLayout
+      title="Crear cuenta"
+      subtitle="Regístrate para acceder a tu credencial digital"
+    >
+      <div style={styles.logoSection}>
+        <div style={styles.logoWrap}>
+          <img
+            src="/logo-sindicato.png"
+            alt="Logo Sindicato Humboldt"
+            style={styles.logo}
+          />
         </div>
       </div>
-    </div>
-  );
-}
 
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "#0B1F3A",
-    padding: 20,
-    fontFamily: "system-ui",
-  },
-  container: {
-    maxWidth: 420,
-    margin: "0 auto",
-  },
-  card: {
-    borderRadius: 24,
-    padding: 16,
-    background: "#12385A",
-    color: "white",
-    boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
-    boxSizing: "border-box",
-  },
-  header: { marginBottom: 10 },
-  brandRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-  },
-  logoWrap: {
-    width: 128,
-    height: 128,
-    borderRadius: 14,
-    background: "rgba(0,0,0,0.22)",
-    border: "1px solid rgba(255,255,255,0.18)",
-    display: "grid",
-    placeItems: "center",
-    overflow: "hidden",
-    flex: "0 0 auto",
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    objectFit: "contain",
-  },
-  org: {
-    fontSize: 18,
-    fontWeight: 900,
-    letterSpacing: 0.4,
-  },
-  orgSub: {
-    fontSize: 11,
-    textTransform: "uppercase",
-    opacity: 0.9,
-    letterSpacing: 1.2,
-  },
-  form: {
-    display: "grid",
-    gap: 10,
-    marginTop: 10,
-    padding: 12,
-    borderRadius: 16,
-    background: "rgba(0,0,0,0.18)",
-    border: "1px solid rgba(255,255,255,0.14)",
-  },
-  label: {
-    fontSize: 12,
-    opacity: 0.95,
-    display: "grid",
-    gap: 4,
-  },
-  input: {
-    width: "100%",
-    padding: 10,
-    borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.35)",
-    background: "rgba(15,23,42,0.35)",
-    color: "white",
-    outline: "none",
-    fontFamily: "inherit",
-    fontSize: 14,
-    boxSizing: "border-box",
-  },
-  fileInput: {
-    width: "100%",
-    padding: 10,
-    borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.35)",
-    background: "rgba(15,23,42,0.35)",
-    color: "white",
-    outline: "none",
-    fontFamily: "inherit",
-    fontSize: 14,
-    boxSizing: "border-box",
-  },
-  button: {
-    marginTop: 6,
-    width: "100%",
-    padding: 12,
-    borderRadius: 12,
-    border: "none",
-    fontWeight: 900,
-    cursor: "pointer",
-    background: "#5CC6C8",
-    color: "#0B1F3A",
-    fontSize: 14,
-  },
-  footerRow: {
-    marginTop: 10,
-    display: "flex",
-    justifyContent: "center",
-  },
-  link: {
-    color: "white",
-    fontWeight: 800,
-    textDecoration: "none",
-    opacity: 0.9,
-  },
-};
+      <form style={styles.form} onSubmit={handleSubmit}>
+        <p style={styles.sectionTitle}>
+          Datos personales
+        </p>
+
+        <Input
+          id="register-display-name"
+          label="Nombre completo"
+          value={displayName}
+          onChange={(event) => {
+            setDisplayName(event.target.value);
+            clearError();
+          }}
+          placeholder="Nombre y apellidos"
+          autoComplete="name"
+          disabled={loading}
+          required
+        />
+
+        <Input
+          id="register-rut"
+          label="RUT"
+          value={rut}
+          onChange={(event) => {
+            setRut(event.target.value);
+            clearError();
+          }}
+          placeholder="Ej: 12.345.678-9"
+          autoComplete="username"
+          disabled={loading}
+          required
+        />
+
+        <Input
+          id="register-phone"
+          label="Teléfono"
+          type="tel"
+          value={telefono}
+          onChange={(event) => {
+            setTelefono(event.target.value);
+            clearError();
+          }}
+          placeholder="+56 9 1234 5678"
+          autoComplete="tel"
+          disabled={loading}
+        />
+
+        <Input
+          id="register-address"
+          label="Dirección"
+          value={direccion}
+          onChange={(event) => {
+            setDireccion(event.target.value);
+            clearError();
+          }}
+          placeholder="Dirección de domicilio"
+          autoComplete="street-address"
+          disabled={loading}
+        />
+
+        <p style={styles.sectionTitle}>
+          Correo electrónico
+        </p>
+
+        <Input
+          id="register-email"
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            clearError();
+          }}
+          placeholder="correo@dominio.com"
+          autoComplete="email"
+          disabled={loading}
+          required
+        />
+
+        <Input
+          id="register-email-confirm"
+          label="Confirmar email"
+          type="email"
+          value={emailConfirm}
+          onChange={(event) => {
+            setEmailConfirm(event.target.value);
+            clearError();
+          }}
+          placeholder="Repite tu correo electrónico"
+          autoComplete="email"
+          disabled={loading}
+          required
+        />
+
+        <p style={styles.sectionTitle}>
+          Seguridad
+        </p>
+
+        <PasswordInput
+          id="register-password"
+          label="Clave"
+          value={password}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            clearError();
+          }}
+          placeholder="Mínimo 6 caracteres"
+          autoComplete="new-password"
+          disabled={loading}
+          helpText="La clave debe tener al menos 6 caracteres."
+          required
+        />
+
+        <PasswordInput
+          id="register-password-confirm"
+          label="Confirmar clave"
+          value={passwordConfirm}
+          onChange={(event) => {
+            setPasswordConfirm(event.target.value);
+            clearError();
+          }}
+          placeholder="Repite tu clave"
+          autoComplete="new-password"
+          disabled={loading}
+          required
+        />
+
+        <p style={styles.sectionTitle}>
+          Fotografía
+        </p>
+
+        <div style={styles.fileGroup}>
+          <label
+            htmlFor="register-photo"
+            style={styles.fileLabel}
+          >
+            Foto de perfil
+          </label>
+
+          <input
+            id="register-photo"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(event) => {
+              setPhotoFile(
+                event.target.files?.[0] || null
+              );
+              clearError();
+            }}
+            disabled={loading}
+            style={styles.fileInput}
+          />
+
+          <p style={styles.selectedFile}>
+            {photoFile
+              ? `Archivo seleccionado: ${photoFile.name}`
+              : "Puedes tomar una fotografía o elegir una imagen del dispositivo."}
+          </p>
+        </div>
+
+        {error ? (
+          <div role="alert" style={styles.error}>
+            {error}
+          </div>
+        ) : null}
+
+        <Button
+          type="submit"
+          loading={loading}
+          disabled={loading}
+        >
+          {loading
+            ? "Registrando..."
+            : "Crear cuenta"}
+        </Button>
+
+        <p style={styles.helper}>
+          {loading
+            ? "Estamos validando tus datos con el padrón..."
+            : "Tus datos serán validados antes de activar la credencial."}
+        </p>
+      </form>
+
+      <div style={styles.footer}>
+        <Link to="/" style={styles.link}>
+          Volver al inicio
+        </Link>
+      </div>
+    </AuthLayout>
+  );
+} 

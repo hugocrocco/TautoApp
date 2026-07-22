@@ -20,10 +20,14 @@ import cl.humboldt.credencial.repo.MemberRepository;
 import cl.humboldt.credencial.repo.SocioFotoRepository;
 import cl.humboldt.credencial.service.EmailService;
 import cl.humboldt.credencial.service.UserPhotoStorageService;
+import cl.humboldt.credencial.util.RutUtils;
+import cl.humboldt.credencial.service.ActivityEventService;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Map;
+import jakarta.servlet.http.HttpServletRequest;
+
 
 @CrossOrigin(
     origins = {
@@ -47,25 +51,28 @@ public class AuthControllerPlaceholder {
   private final AppUserRepository appUserRepository;
   private final EmailVerificationRepository emailVerificationRepository;
   private final EmailService emailService;
+  private final ActivityEventService activityEventService;
   private final String bucketName;
 
   public AuthControllerPlaceholder(
-      UserPhotoStorageService storageService,
-      SocioFotoRepository socioFotoRepository,
-      MemberRepository memberRepository,
-      AppUserRepository appUserRepository,
-      EmailVerificationRepository emailVerificationRepository,
-      EmailService emailService,
-      @Value("${oci.objectstorage.bucket}") String bucketName
-  ) {
+    UserPhotoStorageService storageService,
+    SocioFotoRepository socioFotoRepository,
+    MemberRepository memberRepository,
+    AppUserRepository appUserRepository,
+    EmailVerificationRepository emailVerificationRepository,
+    EmailService emailService,
+    ActivityEventService activityEventService,
+    @Value("${oci.objectstorage.bucket}") String bucketName
+) {
     this.storageService = storageService;
     this.socioFotoRepository = socioFotoRepository;
     this.memberRepository = memberRepository;
     this.appUserRepository = appUserRepository;
     this.emailVerificationRepository = emailVerificationRepository;
     this.emailService = emailService;
+    this.activityEventService = activityEventService;
     this.bucketName = bucketName;
-  }
+}
 
   @GetMapping("/ping")
   public ResponseEntity<?> ping() {
@@ -93,6 +100,7 @@ public class AuthControllerPlaceholder {
   static class VerifyEmailRequest {
     public String rut;
     public String code;
+    public Long institucionId;
   }
 
   @PostMapping(
@@ -102,18 +110,24 @@ public class AuthControllerPlaceholder {
   )
   public ResponseEntity<?> registerJson(@RequestBody RegisterJsonRequest req) throws Exception {
     Long institucionId = (req == null || req.institucionId == null) ? 1L : req.institucionId;
-    String displayName = (req == null || req.displayName == null) ? "" : req.displayName;
     String rut = (req == null || req.rut == null) ? "" : req.rut;
     String password = (req == null || req.password == null) ? "" : req.password;
     String emailClean = normalizeEmail(req == null ? "" : req.email);
-    String rutNorm = normalizeRut(rut);
+    String rutNorm = RutUtils.normalize(rut);
 
-    log.info("REGISTER(JSON): rut={} displayName={} email={} hasPhoto=false", rutNorm, displayName, emailClean);
+    log.info("REGISTER(JSON): rut={} email={} hasPhoto=false", rutNorm, emailClean);
 
-    if (rutNorm.isEmpty() || displayName.isBlank() || password.isBlank() || emailClean.isBlank()) {
+    if (rutNorm.isEmpty() || password.isBlank() || emailClean.isBlank()) {
       return ResponseEntity.badRequest().body(Map.of(
           "ok", false,
-          "message", "Debes completar nombre, RUT, email y contraseña."
+          "message", "Debes completar RUT, email y contraseña."
+      ));
+    }
+
+    if (!RutUtils.isValid(rutNorm)) {
+      return ResponseEntity.badRequest().body(Map.of(
+          "ok", false,
+          "message", "El RUT ingresado no es válido."
       ));
     }
 
@@ -124,20 +138,23 @@ public class AuthControllerPlaceholder {
       ));
     }
 
-    if (!existsActiveMemberByRutAndName(rutNorm, displayName)) {
+    var memberOpt = findActiveMemberByRut(institucionId, rutNorm);
+    if (memberOpt.isEmpty()) {
       return ResponseEntity.status(403).body(Map.of(
           "ok", false,
-          "message", "No encontramos tu nombre y RUT en el padrón del sindicato."
+          "message", "No encontramos tu RUT como socio activo en el padrón del sindicato."
       ));
     }
 
+    String officialDisplayName = cleanDisplayName(memberOpt.get().getNombreCompleto());
     String passwordHash = BCrypt.hashpw(password, BCrypt.gensalt(10));
     String credentialCode = "HUMB-" + String.format("%03d", (int) (Math.random() * 900 + 100));
     String verificationCode = generateVerificationCode();
 
     boolean emailSent = savePendingUserAndVerificationCode(
+        institucionId,
         rutNorm,
-        displayName,
+        officialDisplayName,
         emailClean,
         passwordHash,
         verificationCode
@@ -148,7 +165,7 @@ public class AuthControllerPlaceholder {
 
     return ResponseEntity.ok(Map.ofEntries(
         Map.entry("ok", true),
-        Map.entry("displayName", displayName),
+        Map.entry("displayName", officialDisplayName),
         Map.entry("rut", rutNorm),
         Map.entry("rutMasked", maskRut(rutNorm)),
         Map.entry("credentialCode", credentialCode),
@@ -166,72 +183,166 @@ public class AuthControllerPlaceholder {
   }
 
   @PostMapping(
-      value = "/login",
-      consumes = MediaType.APPLICATION_JSON_VALUE,
-      produces = MediaType.APPLICATION_JSON_VALUE
-  )
-  public ResponseEntity<?> login(@RequestBody LoginJsonRequest req) {
+    value = "/login",
+    consumes = MediaType.APPLICATION_JSON_VALUE,
+    produces = MediaType.APPLICATION_JSON_VALUE
+)
+public ResponseEntity<?> login(
+    @RequestBody LoginJsonRequest req,
+    HttpServletRequest httpRequest
+) {
     String rut = (req == null || req.rut == null) ? "" : req.rut;
     String password = (req == null || req.password == null) ? "" : req.password;
-    Long institucionId = (req == null || req.institucionId == null) ? 1L : req.institucionId;
+    Long institucionId =
+        (req == null || req.institucionId == null)
+            ? 1L
+            : req.institucionId;
 
-    String rutNorm = normalizeRut(rut);
+    String rutNorm = RutUtils.normalize(rut);
 
     if (rutNorm.isEmpty() || password.isBlank()) {
-      return ResponseEntity.badRequest().body(Map.of(
-          "ok", false,
-          "message", "Completa RUT y contraseña."
-      ));
+        activityEventService.record(
+            institucionId,
+            rutNorm,
+            null,
+            "LOGIN_FAILED",
+            "INVALID_REQUEST",
+            "Intento de ingreso sin completar RUT o contraseña.",
+            httpRequest
+        );
+
+        return ResponseEntity.badRequest().body(Map.of(
+            "ok", false,
+            "message", "Completa RUT y contraseña."
+        ));
     }
 
-    var memberOpt = memberRepository.findByRut(rutNorm);
+    var memberOpt = memberRepository.findByInstitucionIdAndRut(institucionId, rutNorm);
+
     if (memberOpt.isEmpty()) {
-      log.info("LOGIN FAIL: rut={} motivo=no existe en padrón", rutNorm);
-      return ResponseEntity.status(403).body(Map.of(
-          "ok", false,
-          "message", "No encontramos tu RUT en el padrón del sindicato."
-      ));
+        log.info(
+            "LOGIN FAIL: rut={} motivo=no existe en padrón",
+            rutNorm
+        );
+
+        activityEventService.record(
+            institucionId,
+            rutNorm,
+            null,
+            "LOGIN_FAILED",
+            "MEMBER_NOT_FOUND",
+            "El RUT no existe en el padrón.",
+            httpRequest
+        );
+
+        return ResponseEntity.status(403).body(Map.of(
+            "ok", false,
+            "message", "No encontramos tu RUT en el padrón del sindicato."
+        ));
     }
 
     Member member = memberOpt.get();
-    String estado = (member.getEstadoSindicato() == null ? "" : member.getEstadoSindicato().trim().toUpperCase(Locale.ROOT));
+
+    String estado = member.getEstadoSindicato() == null
+        ? ""
+        : member.getEstadoSindicato()
+            .trim()
+            .toUpperCase(Locale.ROOT);
 
     if (!"ACTIVO".equals(estado)) {
-      log.info("LOGIN FAIL: rut={} motivo=socio no activo estado={}", rutNorm, estado);
-      return ResponseEntity.status(403).body(Map.of(
-          "ok", false,
-          "message", "Tu cuenta no está activa en el sindicato."
-      ));
+        log.info(
+            "LOGIN FAIL: rut={} motivo=socio no activo estado={}",
+            rutNorm,
+            estado
+        );
+
+        activityEventService.record(
+            institucionId,
+            rutNorm,
+            member.getNombreCompleto(),
+            "LOGIN_BLOCKED",
+            "MEMBER_NOT_ACTIVE",
+            "Acceso bloqueado. Estado del socio: " + estado,
+            httpRequest
+        );
+
+        return ResponseEntity.status(403).body(Map.of(
+            "ok", false,
+            "message", "Tu cuenta no está activa en el sindicato."
+        ));
     }
 
-    var userOpt = appUserRepository.findByRut(rutNorm);
+    var userOpt = appUserRepository.findByInstitucionIdAndRut(institucionId, rutNorm);
+
     if (userOpt.isEmpty()) {
-      log.info("LOGIN FAIL: rut={} motivo=no registrado en app_users", rutNorm);
-      return ResponseEntity.status(403).body(Map.of(
-          "ok", false,
-          "message", "Debes registrarte antes de iniciar sesión."
-      ));
+        log.info(
+            "LOGIN FAIL: rut={} motivo=no registrado en app_users",
+            rutNorm
+        );
+
+        activityEventService.record(
+            institucionId,
+            rutNorm,
+            member.getNombreCompleto(),
+            "LOGIN_FAILED",
+            "USER_NOT_REGISTERED",
+            "El socio existe en el padrón, pero no está registrado en la aplicación.",
+            httpRequest
+        );
+
+        return ResponseEntity.status(403).body(Map.of(
+            "ok", false,
+            "message", "Debes registrarte antes de iniciar sesión."
+        ));
     }
 
     AppUser user = userOpt.get();
 
     if (!BCrypt.checkpw(password, user.getPasswordHash())) {
-      log.info("LOGIN FAIL: rut={} motivo=password incorrecta", rutNorm);
-      return ResponseEntity.status(403).body(Map.of(
-          "ok", false,
-          "message", "RUT o contraseña incorrectos."
-      ));
+        log.info(
+            "LOGIN FAIL: rut={} motivo=password incorrecta",
+            rutNorm
+        );
+
+        activityEventService.record(
+            institucionId,
+            rutNorm,
+            user.getDisplayName(),
+            "LOGIN_FAILED",
+            "WRONG_PASSWORD",
+            "Contraseña incorrecta.",
+            httpRequest
+        );
+
+        return ResponseEntity.status(403).body(Map.of(
+            "ok", false,
+            "message", "RUT o contraseña incorrectos."
+        ));
     }
 
     if (!user.isEmailVerified()) {
-      log.info("LOGIN FAIL: rut={} motivo=email no verificado", rutNorm);
-      return ResponseEntity.status(403).body(Map.of(
-          "ok", false,
-          "message", "Debes verificar tu correo antes de iniciar sesión.",
-          "emailVerificationRequired", true,
-          "rut", rutNorm,
-          "email", user.getEmail()
-      ));
+        log.info(
+            "LOGIN FAIL: rut={} motivo=email no verificado",
+            rutNorm
+        );
+
+        activityEventService.record(
+            institucionId,
+            rutNorm,
+            user.getDisplayName(),
+            "LOGIN_BLOCKED",
+            "EMAIL_NOT_VERIFIED",
+            "El usuario intentó ingresar sin verificar su correo.",
+            httpRequest
+        );
+
+        return ResponseEntity.status(403).body(Map.of(
+            "ok", false,
+            "message", "Debes verificar tu correo antes de iniciar sesión.",
+            "emailVerificationRequired", true,
+            "rut", rutNorm,
+            "email", user.getEmail()
+        ));
     }
 
     String photoObjectKey = socioFotoRepository
@@ -239,7 +350,21 @@ public class AuthControllerPlaceholder {
         .map(SocioFoto::getObjectKey)
         .orElse("");
 
-    log.info("LOGIN OK: rut={} email={}", rutNorm, user.getEmail());
+    log.info(
+        "LOGIN OK: rut={} email={}",
+        rutNorm,
+        user.getEmail()
+    );
+
+    activityEventService.record(
+        institucionId,
+        rutNorm,
+        user.getDisplayName(),
+        "LOGIN_SUCCESS",
+        "SUCCESS",
+        "Inicio de sesión correcto.",
+        httpRequest
+    );
 
     return ResponseEntity.ok(Map.of(
         "ok", true,
@@ -249,7 +374,7 @@ public class AuthControllerPlaceholder {
         "estadoSindicato", estado,
         "photoObjectKey", photoObjectKey
     ));
-  }
+}
 
   @PostMapping(
       value = "/verify-email",
@@ -257,8 +382,9 @@ public class AuthControllerPlaceholder {
       produces = MediaType.APPLICATION_JSON_VALUE
   )
   public ResponseEntity<?> verifyEmail(@RequestBody VerifyEmailRequest req) {
-    String rutNorm = normalizeRut(req == null ? "" : req.rut);
+    String rutNorm = RutUtils.normalize(req == null ? "" : req.rut);
     String code = (req == null || req.code == null) ? "" : req.code.trim();
+    Long institucionId = (req == null || req.institucionId == null) ? 1L : req.institucionId;
 
     if (rutNorm.isEmpty() || code.isBlank()) {
       return ResponseEntity.badRequest().body(Map.of(
@@ -267,7 +393,7 @@ public class AuthControllerPlaceholder {
       ));
     }
 
-    var userOpt = appUserRepository.findByRut(rutNorm);
+    var userOpt = appUserRepository.findByInstitucionIdAndRut(institucionId, rutNorm);
     if (userOpt.isEmpty()) {
       return ResponseEntity.status(404).body(Map.of(
           "ok", false,
@@ -276,7 +402,7 @@ public class AuthControllerPlaceholder {
     }
 
     var verificationOpt = emailVerificationRepository
-        .findTopByRutAndCodeAndUsedFalseOrderByCreatedAtDesc(rutNorm, code);
+        .findTopByInstitucionIdAndRutAndCodeAndUsedFalseOrderByCreatedAtDesc(institucionId, rutNorm, code);
 
     if (verificationOpt.isEmpty()) {
       log.info("EMAIL VERIFY FAIL: rut={} motivo=codigo invalido", rutNorm);
@@ -335,7 +461,7 @@ public class AuthControllerPlaceholder {
   )
   public ResponseEntity<?> register(
       @RequestParam(required = false, defaultValue = "1") Long institucionId,
-      @RequestParam String displayName,
+      @RequestParam(required = false, defaultValue = "") String displayName,
       @RequestParam String rut,
       @RequestParam String password,
       @RequestParam(required = false, defaultValue = "") String email,
@@ -343,20 +469,26 @@ public class AuthControllerPlaceholder {
   ) throws Exception {
 
     String emailClean = normalizeEmail(email);
-    String rutNorm = normalizeRut(rut);
+    String rutNorm = RutUtils.normalize(rut);
 
-    log.info("REGISTER(MULTIPART) HIT: institucionId={} rut={} displayName={} email={} hasPhotoParam={}",
+    log.info("REGISTER(MULTIPART) HIT: institucionId={} rut={} email={} hasPhotoParam={}",
         institucionId,
         rutNorm,
-        displayName,
         emailClean,
         (photo != null)
     );
 
-    if (rutNorm.isEmpty() || displayName.isBlank() || password.isBlank() || emailClean.isBlank()) {
+    if (rutNorm.isEmpty() || password.isBlank() || emailClean.isBlank()) {
       return ResponseEntity.badRequest().body(Map.of(
           "ok", false,
-          "message", "Debes completar nombre, RUT, email y contraseña."
+          "message", "Debes completar RUT, email y contraseña."
+      ));
+    }
+
+    if (!RutUtils.isValid(rutNorm)) {
+      return ResponseEntity.badRequest().body(Map.of(
+          "ok", false,
+          "message", "El RUT ingresado no es válido."
       ));
     }
 
@@ -367,21 +499,23 @@ public class AuthControllerPlaceholder {
       ));
     }
 
-    if (!existsActiveMemberByRutAndName(rutNorm, displayName)) {
+    var memberOpt = findActiveMemberByRut(institucionId, rutNorm);
+    if (memberOpt.isEmpty()) {
       return ResponseEntity.status(403).body(Map.of(
           "ok", false,
-          "message", "No encontramos tu nombre y RUT en el padrón del sindicato."
+          "message", "No encontramos tu RUT como socio activo en el padrón del sindicato."
       ));
     }
 
+    String officialDisplayName = cleanDisplayName(memberOpt.get().getNombreCompleto());
     String passwordHash = BCrypt.hashpw(password, BCrypt.gensalt(10));
 
     if (photo == null) {
-      log.info("REGISTER: rut={} displayName={} photo=NULL", rutNorm, displayName);
+      log.info("REGISTER: rut={} displayName={} photo=NULL", rutNorm, officialDisplayName);
     } else {
       log.info("REGISTER: rut={} displayName={} photoName={} size={} contentType={} empty={}",
           rutNorm,
-          displayName,
+          officialDisplayName,
           photo.getOriginalFilename(),
           photo.getSize(),
           photo.getContentType(),
@@ -441,8 +575,9 @@ public class AuthControllerPlaceholder {
     String verificationCode = generateVerificationCode();
 
     boolean emailSent = savePendingUserAndVerificationCode(
+        institucionId,
         rutNorm,
-        displayName,
+        officialDisplayName,
         emailClean,
         passwordHash,
         verificationCode
@@ -453,7 +588,7 @@ public class AuthControllerPlaceholder {
 
     return ResponseEntity.ok(Map.ofEntries(
         Map.entry("ok", true),
-        Map.entry("displayName", displayName),
+        Map.entry("displayName", officialDisplayName),
         Map.entry("rut", rutNorm),
         Map.entry("rutMasked", maskRut(rutNorm)),
         Map.entry("credentialCode", credentialCode),
@@ -471,13 +606,16 @@ public class AuthControllerPlaceholder {
   }
 
   private boolean savePendingUserAndVerificationCode(
+      Long institucionId,
       String rutNorm,
       String displayName,
       String emailClean,
       String passwordHash,
       String verificationCode
   ) {
-    AppUser user = appUserRepository.findByRut(rutNorm).orElseGet(AppUser::new);
+    AppUser user = appUserRepository.findByInstitucionIdAndRut(institucionId, rutNorm).orElseGet(AppUser::new);
+
+    user.setInstitucionId(institucionId);
 
     user.setRut(rutNorm);
     user.setDisplayName(displayName.trim().replaceAll("\\s+", " "));
@@ -489,6 +627,7 @@ public class AuthControllerPlaceholder {
     appUserRepository.save(user);
 
     EmailVerification verification = new EmailVerification();
+    verification.setInstitucionId(institucionId);
     verification.setRut(rutNorm);
     verification.setEmail(emailClean);
     verification.setCode(verificationCode);
@@ -509,33 +648,37 @@ public class AuthControllerPlaceholder {
     }
   }
 
-  private boolean existsActiveMemberByRutAndName(String rut, String displayName) {
-    String rutNorm = normalizeRut(rut);
-    String nameNorm = normalizeName(displayName);
+  private java.util.Optional<Member> findActiveMemberByRut(Long institucionId, String rut) {
+    String rutNorm = RutUtils.normalize(rut);
 
-    if (rutNorm.isEmpty() || nameNorm.isEmpty()) return false;
+    if (rutNorm.isEmpty()) {
+      return java.util.Optional.empty();
+    }
 
-    var opt = memberRepository.findByRut(rutNorm);
+    var opt = memberRepository.findByInstitucionIdAndRut(institucionId, rutNorm);
     if (opt.isEmpty()) {
       log.info("Members(DB): no existe rut={}", rutNorm);
-      return false;
+      return java.util.Optional.empty();
     }
 
-    Member m = opt.get();
+    Member member = opt.get();
+    String estado = member.getEstadoSindicato() == null
+        ? ""
+        : member.getEstadoSindicato().trim().toUpperCase(Locale.ROOT);
 
-    String estado = (m.getEstadoSindicato() == null ? "" : m.getEstadoSindicato().trim().toUpperCase(Locale.ROOT));
     if (!"ACTIVO".equals(estado)) {
       log.info("Members(DB): rut={} estadoSindicato={} (no ACTIVO)", rutNorm, estado);
-      return false;
+      return java.util.Optional.empty();
     }
 
-    String dbNameNorm = normalizeName(m.getNombreCompleto());
-    if (!nameNorm.equals(dbNameNorm)) {
-      log.info("Members(DB): no match nombre rut={} input='{}' db='{}'", rutNorm, nameNorm, dbNameNorm);
-      return false;
-    }
+    return java.util.Optional.of(member);
+  }
 
-    return true;
+  private String cleanDisplayName(String name) {
+    if (name == null) {
+      return "";
+    }
+    return name.trim().replaceAll("\\s+", " ");
   }
 
   private String normalizeEmail(String email) {
@@ -547,23 +690,6 @@ public class AuthControllerPlaceholder {
     return String.format("%06d", (int) (Math.random() * 900000) + 100000);
   }
 
-  private String normalizeRut(String rut) {
-    if (rut == null) return "";
-    String r = rut.trim().toUpperCase(Locale.ROOT)
-        .replace(".", "")
-        .replace("-", "")
-        .replace(" ", "");
-
-    if (r.length() < 2) return r;
-
-    return r.substring(0, r.length() - 1) + "-" + r.substring(r.length() - 1);
-  }
-
-  private String normalizeName(String name) {
-    if (name == null) return "";
-    String s = name.trim().replaceAll("\\s+", " ");
-    return s.toLowerCase(Locale.ROOT);
-  }
 
   private String maskRut(String rut) {
     String clean = rut == null ? "" : rut.replace(".", "").trim();

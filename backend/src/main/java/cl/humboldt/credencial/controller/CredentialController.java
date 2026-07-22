@@ -12,6 +12,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Map;
+import jakarta.servlet.http.HttpServletRequest;
+import cl.humboldt.credencial.tenant.InstitutionResolver;
 
 @CrossOrigin(
     origins = {
@@ -29,10 +31,12 @@ public class CredentialController {
 
   private final CredentialTokenService tokenService;
   private final MemberRepository memberRepository;
+  private final InstitutionResolver institutionResolver;
 
-  public CredentialController(CredentialTokenService tokenService, MemberRepository memberRepository) {
+  public CredentialController(CredentialTokenService tokenService, MemberRepository memberRepository, InstitutionResolver institutionResolver) {
     this.tokenService = tokenService;
     this.memberRepository = memberRepository;
+    this.institutionResolver = institutionResolver;
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)
@@ -41,7 +45,8 @@ public class CredentialController {
   }
 
   @PostMapping("/qr")
-  public ResponseEntity<?> generateQr(@RequestBody GenerateQrRequest req) {
+  public ResponseEntity<?> generateQr(@RequestBody GenerateQrRequest req, HttpServletRequest request) {
+    Long institucionId = institutionResolver.resolveInstitutionId(request);
     String rut = normalizeRut(req == null ? "" : req.rut);
 
     if (rut.isBlank()) {
@@ -51,7 +56,7 @@ public class CredentialController {
       ));
     }
 
-    var memberOpt = memberRepository.findByRut(rut);
+    var memberOpt = memberRepository.findByInstitucionIdAndRut(institucionId, rut);
     if (memberOpt.isEmpty()) {
       return ResponseEntity.status(404).body(Map.of(
           "ok", false,
@@ -67,7 +72,7 @@ public class CredentialController {
       ));
     }
 
-    var generated = tokenService.generate(rut);
+    var generated = tokenService.generate(institucionId, rut);
 
     return ResponseEntity.ok(Map.of(
         "ok", true,
@@ -80,8 +85,13 @@ public class CredentialController {
   }
 
   @GetMapping("/verify/{token}")
-  public ResponseEntity<?> verify(@PathVariable String token) {
+  public ResponseEntity<?> verify(@PathVariable String token, HttpServletRequest request) {
+    Long institucionId = institutionResolver.resolveInstitutionId(request);
     var verified = tokenService.verify(token);
+
+    if (verified.valid() && !institucionId.equals(verified.institucionId())) {
+      return ResponseEntity.status(403).body(Map.of("ok", false, "status", "INVALID_INSTITUTION", "message", "La credencial pertenece a otra institución."));
+    }
 
     if (!verified.valid()) {
       return ResponseEntity.ok(Map.of(
@@ -94,7 +104,7 @@ public class CredentialController {
       ));
     }
 
-    var memberOpt = memberRepository.findByRut(verified.rut());
+    var memberOpt = memberRepository.findByInstitucionIdAndRut(institucionId, verified.rut());
     if (memberOpt.isEmpty()) {
       return ResponseEntity.ok(Map.of(
           "ok", false,

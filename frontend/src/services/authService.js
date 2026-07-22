@@ -3,6 +3,7 @@
 import { apiFetch } from "./apiClient";
 
 const BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
+
 export async function login(credentials) {
   return apiFetch("/api/auth/login", {
     method: "POST",
@@ -80,7 +81,10 @@ export async function checkSession() {
 }
 
 export async function pingHealth() {
-  return apiFetch("/api/health", { method: "GET", timeoutMs: 3000 });
+  return apiFetch("/api/health", {
+    method: "GET",
+    timeoutMs: 3000,
+  });
 }
 
 export async function adminListUsers(adminKey = "hbdt", q = "") {
@@ -129,4 +133,39 @@ export async function adminListMembers(adminKey = "hbdt", q = "") {
   }
 
   return await res.json();
+}
+
+export async function forgotPassword(rut) {
+  return apiFetch("/api/auth/forgot-password", {
+    method: "POST",
+    body: {
+      rut,
+    },
+  });
+}
+
+export async function resetPassword(token, newPassword) {
+  return apiFetch("/api/auth/reset-password", {
+    method: "POST",
+    body: {
+      token,
+      newPassword,
+    },
+
+  });
+}
+export async function changePassword({
+  rut,
+  currentPassword,
+  newPassword,
+}) 
+{
+  return apiFetch("/api/auth/change-password", {
+    method: "POST",
+    body: {
+      rut,
+      currentPassword,
+      newPassword,
+    },
+  });
 }

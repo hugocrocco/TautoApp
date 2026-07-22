@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Locale;
 import java.util.Map;
+import jakarta.servlet.http.HttpServletRequest;
+import cl.humboldt.credencial.tenant.InstitutionResolver;
 
 @CrossOrigin(
     origins = {
@@ -38,17 +40,20 @@ public class PasswordController {
   private final PasswordResetService passwordResetService;
   private final EmailService emailService;
   private final String frontendBaseUrl;
+  private final InstitutionResolver institutionResolver;
 
   public PasswordController(
       AppUserRepository appUserRepository,
       PasswordResetService passwordResetService,
       EmailService emailService,
+      InstitutionResolver institutionResolver,
       @Value("${app.frontend.base-url:https://hbdt.tauto.cl}")
       String frontendBaseUrl
   ) {
     this.appUserRepository = appUserRepository;
     this.passwordResetService = passwordResetService;
     this.emailService = emailService;
+    this.institutionResolver = institutionResolver;
     this.frontendBaseUrl = frontendBaseUrl;
   }
 
@@ -76,8 +81,10 @@ public class PasswordController {
       produces = MediaType.APPLICATION_JSON_VALUE
   )
   public ResponseEntity<?> forgotPassword(
-      @RequestBody ForgotPasswordRequest request
+      @RequestBody ForgotPasswordRequest request,
+      HttpServletRequest httpRequest
   ) {
+    Long institucionId = institutionResolver.resolveInstitutionId(httpRequest);
     String rut = normalizeRut(request == null ? "" : request.rut);
 
     String genericMessage =
@@ -90,7 +97,7 @@ public class PasswordController {
       ));
     }
 
-    var userOptional = appUserRepository.findByRut(rut);
+    var userOptional = appUserRepository.findByInstitucionIdAndRut(institucionId, rut);
 
     if (userOptional.isEmpty()) {
       log.info(
@@ -215,8 +222,10 @@ public class PasswordController {
       produces = MediaType.APPLICATION_JSON_VALUE
   )
   public ResponseEntity<?> changePassword(
-      @RequestBody ChangePasswordRequest request
+      @RequestBody ChangePasswordRequest request,
+      HttpServletRequest httpRequest
   ) {
+    Long institucionId = institutionResolver.resolveInstitutionId(httpRequest);
     String rut =
         normalizeRut(request == null ? "" : request.rut);
 
@@ -248,7 +257,7 @@ public class PasswordController {
       ));
     }
 
-    var userOptional = appUserRepository.findByRut(rut);
+    var userOptional = appUserRepository.findByInstitucionIdAndRut(institucionId, rut);
 
     if (userOptional.isEmpty()) {
       return ResponseEntity.status(404).body(Map.of(

@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import PageFlipShell from "../components/PageFlipShell";
+
+import { AuthLayout } from "../layouts";
+import { Button, Input } from "../components/ui";
+import {
+  colors,
+  globals,
+  radius,
+  spacing,
+  typography,
+} from "../theme";
+
 import { forgotPassword } from "../services/authService";
 
 export default function ForgotPassword() {
@@ -42,210 +52,130 @@ export default function ForgotPassword() {
   };
 
   const styles = {
-    page: {
-      minHeight: "100vh",
-      background: "#0B1F3A",
-      padding: 20,
-      fontFamily: "system-ui",
-    },
-
-    container: {
-      maxWidth: 420,
-      margin: "0 auto",
-    },
-
-    card: {
-      borderRadius: 24,
-      padding: 18,
-      background:
-        "linear-gradient(180deg, #12385A 0%, #1E4E75 100%)",
-      color: "white",
-      boxShadow: "0 20px 40px rgba(0,0,0,0.40)",
-    },
-
-    header: {
+    logoSection: {
       display: "flex",
-      alignItems: "center",
-      gap: 12,
-      marginBottom: 18,
+      justifyContent: "center",
     },
 
     logoWrap: {
-      width: 82,
-      height: 82,
-      borderRadius: 18,
-      background: "rgba(255,255,255,0.14)",
-      border: "1px solid rgba(255,255,255,0.18)",
+      width: 104,
+      height: 104,
       display: "grid",
       placeItems: "center",
       overflow: "hidden",
-      flex: "0 0 auto",
+      borderRadius: radius.large,
+      border: "1px solid rgba(255,255,255,0.18)",
+      background: "rgba(255,255,255,0.10)",
     },
 
     logo: {
-      width: 76,
-      height: 76,
+      width: 96,
+      height: 96,
       objectFit: "contain",
     },
 
-    title: {
-      fontSize: 20,
-      fontWeight: 900,
-      margin: 0,
-    },
-
-    subtitle: {
-      fontSize: 13,
-      opacity: 0.9,
-      marginTop: 4,
-    },
-
     form: {
-      display: "grid",
-      gap: 12,
-      maxWidth: 300,
-      margin: "0 auto",
-    },
-
-    label: {
-      display: "grid",
-      gap: 6,
-      fontSize: 12,
-      opacity: 0.92,
-    },
-
-    input: {
       width: "100%",
-      boxSizing: "border-box",
-      padding: 11,
-      borderRadius: 10,
-      border: "1px solid rgba(255,255,255,0.35)",
-      background: "rgba(15,23,42,0.35)",
-      color: "white",
-      outline: "none",
-      fontSize: 14,
-    },
-
-    button: {
-      marginTop: 4,
-      width: "100%",
-      padding: 12,
-      borderRadius: 12,
-      border: "none",
-      fontWeight: 900,
-      cursor: loading ? "not-allowed" : "pointer",
-      background: loading ? "#c5e7a5" : "#FFB347",
-      color: "#0B1F3A",
-      opacity: loading ? 0.8 : 1,
+      display: "flex",
+      flexDirection: "column",
+      gap: spacing.md,
     },
 
     message: {
-      fontSize: 12,
-      lineHeight: 1.5,
-      color: "#E5F5C6",
-      background: "rgba(0,0,0,0.22)",
-      border: "1px solid rgba(229,245,198,0.25)",
-      padding: 10,
-      borderRadius: 12,
+      ...globals.successBox,
+      textAlign: "center",
     },
 
     error: {
-      fontSize: 12,
-      lineHeight: 1.5,
-      color: "#FFE08A",
-      background: "rgba(0,0,0,0.25)",
-      border: "1px solid rgba(255,255,255,0.18)",
-      padding: 10,
-      borderRadius: 12,
+      ...globals.errorBox,
+      textAlign: "center",
+    },
+
+    helper: {
+      margin: 0,
+      color: colors.textMuted,
+      fontSize: typography.size.small,
+      lineHeight: typography.lineHeight.normal,
+      textAlign: "center",
     },
 
     footer: {
-      marginTop: 16,
+      paddingTop: spacing.sm,
+      borderTop: "1px solid rgba(255,255,255,0.10)",
       textAlign: "center",
-      fontSize: 12,
     },
 
     link: {
-      color: "#E5F5C6",
-      fontWeight: 900,
+      color: colors.textSecondary,
       textDecoration: "none",
+      fontSize: typography.size.small,
+      fontWeight: typography.weight.bold,
     },
   };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-        <PageFlipShell>
-          <div style={styles.card}>
-            <div style={styles.header}>
-              <div style={styles.logoWrap}>
-                <img
-                  src="/logo-sindicato.png"
-                  alt="Sindicato Humboldt"
-                  style={styles.logo}
-                />
-              </div>
-
-              <div>
-                <h1 style={styles.title}>
-                  Restablecer contraseña
-                </h1>
-
-                <div style={styles.subtitle}>
-                  Ingresa tu RUT y enviaremos un enlace al correo registrado.
-                </div>
-              </div>
-            </div>
-
-            <form style={styles.form} onSubmit={handleSubmit}>
-              <label style={styles.label}>
-                RUT
-
-                <input
-                  value={rut}
-                  onChange={(event) => {
-                    setRut(event.target.value);
-                    setError("");
-                    setMessage("");
-                  }}
-                  style={styles.input}
-                  placeholder="Ej: 12.345.678-9"
-                  autoComplete="username"
-                  disabled={loading}
-                />
-              </label>
-
-              {message ? (
-                <div style={styles.message}>
-                  {message}
-                </div>
-              ) : null}
-
-              {error ? (
-                <div style={styles.error}>
-                  {error}
-                </div>
-              ) : null}
-
-              <button
-                type="submit"
-                style={styles.button}
-                disabled={loading}
-              >
-                {loading
-                  ? "Enviando..."
-                  : "Enviar enlace"}
-              </button>
-            </form>
-
-            <div style={styles.footer}>
-              <Link to="/login" style={styles.link}>
-                Volver al inicio de sesión
-              </Link>
-            </div>
-          </div>
-        </PageFlipShell>
+    <AuthLayout
+      title="Restablecer contraseña"
+      subtitle="Ingresa tu RUT y enviaremos un enlace al correo registrado"
+    >
+      <div style={styles.logoSection}>
+        <div style={styles.logoWrap}>
+          <img
+            src="/logo-sindicato.png"
+            alt="Logo Sindicato Humboldt"
+            style={styles.logo}
+          />
+        </div>
       </div>
-    </div>
+
+      <form style={styles.form} onSubmit={handleSubmit}>
+        <Input
+          id="forgot-password-rut"
+          name="rut"
+          label="RUT"
+          value={rut}
+          onChange={(event) => {
+            setRut(event.target.value);
+            setError("");
+            setMessage("");
+          }}
+          placeholder="Ej: 12.345.678-9"
+          autoComplete="username"
+          disabled={loading}
+          required
+        />
+
+        {message ? (
+          <div role="status" style={styles.message}>
+            {message}
+          </div>
+        ) : null}
+
+        {error ? (
+          <div role="alert" style={styles.error}>
+            {error}
+          </div>
+        ) : null}
+
+        <Button
+          type="submit"
+          loading={loading}
+          disabled={loading}
+        >
+          {loading ? "Enviando..." : "Enviar enlace"}
+        </Button>
+
+        <p style={styles.helper}>
+          Por seguridad, el sistema mostrará el mismo mensaje aunque el RUT no
+          esté registrado.
+        </p>
+      </form>
+
+      <div style={styles.footer}>
+        <Link to="/login" style={styles.link}>
+          Volver al inicio de sesión
+        </Link>
+      </div>
+    </AuthLayout>
   );
 }

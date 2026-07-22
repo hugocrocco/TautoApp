@@ -15,13 +15,16 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import jakarta.servlet.http.HttpServletRequest;
+import cl.humboldt.credencial.tenant.InstitutionResolver;
 
 @CrossOrigin(
     origins = {
         "http://localhost:5173",
         "http://192.168.1.7:5173",
         "https://tauto.cl",
-        "https://www.tauto.cl"
+        "https://www.tauto.cl",
+        "https://hbdt.tauto.cl"
     },
     allowCredentials = "false"
 )
@@ -33,16 +36,19 @@ public class AdminController {
   private final MemberRepository memberRepository;
   private final SocioFotoRepository socioFotoRepository;
   private final String adminKey;
+  private final InstitutionResolver institutionResolver;
 
   public AdminController(
       AppUserRepository appUserRepository,
       MemberRepository memberRepository,
       SocioFotoRepository socioFotoRepository,
+      InstitutionResolver institutionResolver,
       @Value("${app.admin-key}") String adminKey
   ) {
     this.appUserRepository = appUserRepository;
     this.memberRepository = memberRepository;
     this.socioFotoRepository = socioFotoRepository;
+    this.institutionResolver = institutionResolver;
     this.adminKey = adminKey;
   }
 
@@ -58,7 +64,8 @@ public class AdminController {
   @GetMapping("/users")
   public ResponseEntity<?> listUsers(
       @RequestHeader(value = "X-ADMIN-KEY", required = false) String key,
-      @RequestParam(required = false, defaultValue = "") String q
+      @RequestParam(required = false, defaultValue = "") String q,
+      HttpServletRequest request
   ) {
     if (!isValidAdminKey(key)) {
       return ResponseEntity.status(403).body(Map.of(
@@ -67,13 +74,14 @@ public class AdminController {
       ));
     }
 
+    Long institutionId = institutionResolver.resolveInstitutionId(request);
     String query = normalize(q);
 
-    List<Map<String, Object>> users = appUserRepository.findAll()
+    List<Map<String, Object>> users = appUserRepository.findAllByInstitucionId(institutionId)
         .stream()
         .filter(user -> matchesQuery(user, query))
         .sorted(Comparator.comparing(AppUser::getRut))
-        .map(this::toAdminUserRow)
+        .map(user -> toAdminUserRow(user, institutionId))
         .toList();
 
     return ResponseEntity.ok(Map.of(
@@ -83,11 +91,11 @@ public class AdminController {
     ));
   }
 
-  private Map<String, Object> toAdminUserRow(AppUser user) {
+  private Map<String, Object> toAdminUserRow(AppUser user, Long institutionId) {
     String rut = safe(user.getRut());
 
-    var memberOpt = memberRepository.findByRut(rut);
-    var photoOpt = socioFotoRepository.findByInstitucionIdAndRut(1L, rut);
+    var memberOpt = memberRepository.findByInstitucionIdAndRut(institutionId, rut);
+    var photoOpt = socioFotoRepository.findByInstitucionIdAndRut(institutionId, rut);
 
     String estadoSindicato = memberOpt
         .map(Member::getEstadoSindicato)
@@ -126,7 +134,7 @@ public class AdminController {
 
     String photoUrl = photoObjectKey.isBlank()
         ? ""
-        : "/api/photos/1/" + rut;
+        : "/api/photos/" + institutionId + "/" + rut;
 
     return Map.ofEntries(
         Map.entry("rut", rut),
